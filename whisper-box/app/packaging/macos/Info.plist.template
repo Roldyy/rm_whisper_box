@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>WB - Whisper Box</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>be.squareflow.whisperbox</string>
+
+    <key>CFBundleVersion</key>
+    <string>{{VERSION}}</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>{{VERSION}}</string>
+
+    <key>CFBundleExecutable</key>
+    <string>WB - Whisper Box</string>
+
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+
+    <key>LSUIElement</key>
+    <false/>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Whisper Box lit les fichiers audio/vidéo depuis votre dossier Documents.</string>
+
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Whisper Box lit les fichiers audio/vidéo depuis vos Téléchargements.</string>
+
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Whisper Box lit les fichiers audio/vidéo depuis votre Bureau.</string>
+
+    <key>NSMusicUsageDescription</key>
+    <string>Whisper Box accède aux fichiers audio dans Musique.</string>
+
+    <key>NSMoviesFolderUsageDescription</key>
+    <string>Whisper Box lit les fichiers vidéo depuis Films.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Whisper Box peut enregistrer depuis votre micro (fonctionnalité future).</string>
+</dict>
+</plist>

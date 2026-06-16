@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+node_modules/
+app/backend/static/
+app/backend/__pycache__/
+app/backend/models/__pycache__/
+app/backend/api/__pycache__/
+app/backend/services/__pycache__/
+WB - Whisper Box.app/
+*.egg-info/
+.venv/
+dist/
