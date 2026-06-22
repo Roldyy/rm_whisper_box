@@ -24,6 +24,8 @@ from api.jobs import router as jobs_router
 from api.logs import router as logs_router
 from api.settings import router as settings_router
 from api.ws import router as ws_router
+from api.recording import router as recording_router
+from api.system import router as system_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +66,8 @@ app.include_router(jobs_router)
 app.include_router(logs_router)
 app.include_router(settings_router)
 app.include_router(ws_router)
+app.include_router(recording_router)
+app.include_router(system_router)
 
 # Static files (built frontend) — mounted only if directory exists
 _static_dir = Path(__file__).parent / "static"

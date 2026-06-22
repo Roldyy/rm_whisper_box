@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["transcription"])
 
 class TranscribeRequest(BaseModel):
     source_path: str
-    model: str = "base"
+    model: str = "large-v3-turbo"
     language: str = ""
     output_format: str = "txt"
     output_dir: str = ""
@@ -85,6 +85,7 @@ async def transcribe(
         model=req.model,
         language=req.language or None,
         output_format=req.output_format,
+        output_dir=req.output_dir or None,
         status="pending",
         progress=0,
         task=req.task,
@@ -152,6 +153,7 @@ async def rerun_job(job_id: int, db: AsyncSession = Depends(get_db)):
         model=original.model,
         language=original.language,
         output_format=original.output_format,
+        output_dir=original.output_dir,
         status="pending",
         progress=0,
         task=original.task,

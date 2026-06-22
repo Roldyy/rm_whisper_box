@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Loader2, XCircle } from 'lucide-react'
+import { Loader2, XCircle, AlertCircle } from 'lucide-react'
+import axios from 'axios'
 import FileDropZone from '../components/FileDropZone'
 import TranscribeForm, { FormValues } from '../components/TranscribeForm'
 import ProgressBar from '../components/ProgressBar'
@@ -14,7 +15,7 @@ export default function TranscribePage() {
 
   const [filePath, setFilePath] = useState('')
   const [form, setForm] = useState<FormValues>({
-    model: settings?.default_model ?? 'base',
+    model: settings?.default_model ?? 'large-v3-turbo',
     language: settings?.default_language ?? '',
     output_format: settings?.default_output_format ?? 'txt',
     output_dir: settings?.default_output_dir ?? '',
@@ -37,14 +38,16 @@ export default function TranscribePage() {
   const jobState = activeJobId != null ? runningJobs.get(activeJobId) : undefined
   const percent = jobState?.percent ?? 0
   const logs = jobState?.logs ?? []
+  const wsError = jobState?.error
 
-  const { mutate: createJob, isPending } = useCreateTranscription()
+  const { mutate: createJob, isPending, error: createError } = useCreateTranscription()
   const { mutate: cancelJob } = useCancelJob()
 
   // WebSocket
   useTranscriptionWs(activeJobId)
 
-  const isRunning = activeJobId != null && (jobState !== undefined)
+  const isSubmitted = activeJobId != null
+  const isRunning = isSubmitted && jobState !== undefined
 
   function handleFormChange(key: keyof FormValues, val: string | boolean | number) {
     setForm((prev) => ({ ...prev, [key]: val }))
@@ -52,6 +55,7 @@ export default function TranscribePage() {
 
   function handleSubmit() {
     if (!filePath.trim()) return
+    if (!filePath.startsWith('/')) return   // non-absolute path — button should already be disabled
     createJob(
       {
         source_path: filePath.trim(),
@@ -94,13 +98,25 @@ export default function TranscribePage() {
         <FileDropZone value={filePath} onChange={setFilePath} />
       </section>
 
+      {/* Error banner */}
+      {createError && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-800/50 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+          <AlertCircle className="mt-0.5 w-4 h-4 shrink-0" />
+          <span>
+            {axios.isAxiosError(createError)
+              ? ((createError.response?.data as { detail?: string } | undefined)?.detail ?? createError.message)
+              : String(createError)}
+          </span>
+        </div>
+      )}
+
       {/* Options + Stop button */}
       <section className="bg-white dark:bg-gray-800/40 rounded-xl p-5 border border-gray-200 dark:border-gray-700/50 space-y-4">
         <TranscribeForm
           values={form}
           onChange={handleFormChange}
           onSubmit={handleSubmit}
-          disabled={!filePath.trim() || isPending || isRunning}
+          disabled={!filePath.startsWith('/') || isPending || isSubmitted}
           isLoading={isPending}
         />
 
@@ -121,19 +137,33 @@ export default function TranscribePage() {
         </div>
       </section>
 
-      {/* Progress */}
-      {(isRunning || percent > 0) && (
+      {/* Progress — visible from the moment a job is submitted */}
+      {isSubmitted && (
         <section className="bg-white dark:bg-gray-800/40 rounded-xl p-5 border border-gray-200 dark:border-gray-700/50 space-y-3">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Transcription en cours… {percent}%
-            </span>
-          </div>
-
-          <ProgressBar percent={percent} />
-
-          <LogViewer logs={logs} className="h-40" />
+          {wsError ? (
+            <div className="flex items-start gap-3 text-sm text-red-400">
+              <AlertCircle className="mt-0.5 w-4 h-4 shrink-0" />
+              <span>{wsError}</span>
+            </div>
+          ) : !isRunning ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                En attente du démarrage…
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  Transcription en cours… {percent}%
+                </span>
+              </div>
+              <ProgressBar percent={percent} />
+              <LogViewer logs={logs} className="h-40" />
+            </>
+          )}
         </section>
       )}
     </div>

@@ -14,11 +14,13 @@ import {
   Moon,
   RefreshCw,
   Loader2,
+  Radio,
 } from 'lucide-react'
 import TranscribePage from './pages/TranscribePage'
 import HistoryPage from './pages/HistoryPage'
 import LogsPage from './pages/LogsPage'
 import SettingsPage from './pages/SettingsPage'
+import RecordPage from './pages/RecordPage'
 import { useAppStore } from './stores/appStore'
 import { useUpdate } from './api/settings'
 
@@ -43,6 +45,7 @@ function Layout() {
 
   const navItems = [
     { to: '/', label: 'Transcrire', icon: Mic2, end: true },
+    { to: '/record', label: 'Enregistrer', icon: Radio, end: false },
     { to: '/history', label: 'Historique', icon: History, end: false },
     { to: '/logs', label: 'Logs', icon: ScrollText, end: false },
     { to: '/settings', label: 'Paramètres', icon: Settings, end: false },
@@ -138,6 +141,7 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <TranscribePage /> },
+      { path: 'record', element: <RecordPage /> },
       { path: 'history', element: <HistoryPage /> },
       { path: 'logs', element: <LogsPage /> },
       { path: 'settings', element: <SettingsPage /> },

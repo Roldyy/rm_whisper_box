@@ -24,7 +24,7 @@
     <string>APPL</string>
 
     <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
+    <string>14.2</string>
 
     <key>LSUIElement</key>
     <false/>
@@ -45,6 +45,9 @@
     <string>Whisper Box lit les fichiers vidéo depuis Films.</string>
 
     <key>NSMicrophoneUsageDescription</key>
-    <string>Whisper Box peut enregistrer depuis votre micro (fonctionnalité future).</string>
+    <string>Whisper Box enregistre depuis votre microphone pour la transcription audio.</string>
+
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Whisper Box capture l'audio système pour la transcription en temps réel.</string>
 </dict>
 </plist>

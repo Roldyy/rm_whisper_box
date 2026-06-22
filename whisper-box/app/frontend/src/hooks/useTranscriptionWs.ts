@@ -34,7 +34,7 @@ type WsEvent = WsProgressEvent | WsLogEvent | WsDoneEvent | WsErrorEvent
 export function useTranscriptionWs(jobId: number | null) {
   const wsRef = useRef<WebSocket | null>(null)
   const queryClient = useQueryClient()
-  const { updateJobProgress, appendLog, clearJob } = useAppStore()
+  const { updateJobProgress, appendLog, clearJob, setJobError, setActiveJob } = useAppStore()
 
   useEffect(() => {
     if (jobId === null) return
@@ -60,15 +60,19 @@ export function useTranscriptionWs(jobId: number | null) {
           appendLog(jobId, parsed.message)
           break
 
-        case 'done':
-        case 'error': {
-          // Refresh job list and detail
+        case 'done': {
           void queryClient.invalidateQueries({ queryKey: jobKeys.all })
-          void queryClient.invalidateQueries({
-            queryKey: jobKeys.detail(jobId),
-          })
-          // Let progress stay until cleared — user can see 100% or error
-          setTimeout(() => clearJob(jobId), 3000)
+          void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) })
+          setTimeout(() => { clearJob(jobId); setActiveJob(null) }, 3000)
+          ws.close()
+          break
+        }
+
+        case 'error': {
+          setJobError(jobId, parsed.message)
+          void queryClient.invalidateQueries({ queryKey: jobKeys.all })
+          void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) })
+          setTimeout(() => { clearJob(jobId); setActiveJob(null) }, 5000)
           ws.close()
           break
         }
@@ -83,7 +87,7 @@ export function useTranscriptionWs(jobId: number | null) {
       ws.close()
       wsRef.current = null
     }
-  }, [jobId, queryClient, updateJobProgress, appendLog, clearJob])
+  }, [jobId, queryClient, updateJobProgress, appendLog, clearJob, setJobError, setActiveJob])
 
   return wsRef
 }

@@ -10,12 +10,14 @@ def validate_source_path(path: str) -> Path:
     if not path or not path.strip():
         raise ValueError("Le chemin du fichier source ne peut pas être vide.")
 
-    resolved = Path(path).resolve()
+    # Check the raw input first — resolve() always returns absolute so the old
+    # check was dead code.  Catching this early gives a clear error message.
+    if not Path(path).is_absolute():
+        raise ValueError(
+            f"Le chemin doit être absolu (commencer par '/') : '{path}'"
+        )
 
-    # Basic path traversal guard: resolved must not escape via symlinks to weird places
-    # (We just validate it's absolute and exists as a file)
-    if not resolved.is_absolute():
-        raise ValueError(f"Le chemin doit être absolu : {path}")
+    resolved = Path(path).resolve()
 
     if not resolved.exists():
         raise ValueError(f"Le fichier n'existe pas : {resolved}")

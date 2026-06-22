@@ -12,6 +12,13 @@ echo "=== Whisper Box — Create macOS .app ==="
 echo "Version : $APP_VERSION"
 echo "Bundle  : $APP_BUNDLE"
 
+# --- 0. Remove previous version ---
+echo "Suppression de l'ancienne version..."
+DESKTOP_ALIAS="$HOME/Desktop/$APP_NAME.app"
+rm -rf "$APP_BUNDLE"
+rm -f "$DESKTOP_ALIAS"
+echo "  → Ancienne version supprimée"
+
 # --- 1. Find Homebrew Python (3.12 ou 3.11 en priorité — Whisper incompatible 3.13+) ---
 PYTHON3=""
 for p in \
@@ -49,21 +56,43 @@ fi
 if [ ! -d "node_modules" ]; then npm install; fi
 npm run build
 
-# --- 3. Install Python dependencies ---
+# --- 3. Compile Swift SCRecorder helper ---
+echo "Compilation du helper Swift SCRecorder..."
+SWIFT_SRC="$REPO_ROOT/app/swift/SCRecorder.swift"
+# Compile to app/swift/SCRecorder so dev mode (uvicorn outside .app) can find it
+DEV_BIN="$REPO_ROOT/app/swift/SCRecorder"
+mkdir -p "$APP_BUNDLE/Contents/Resources"
+if ! swiftc \
+    -framework ScreenCaptureKit \
+    -framework AVFoundation \
+    -framework CoreMedia \
+    -target arm64-apple-macos14.2 \
+    "$SWIFT_SRC" \
+    -o "$DEV_BIN" 2>&1; then
+    echo "ERROR: Compilation Swift échouée."
+    exit 1
+fi
+chmod +x "$DEV_BIN"
+echo "  → SCRecorder compilé (dev) : $DEV_BIN"
+
+# --- 4. Install Python dependencies ---
 echo "Installation des dépendances Python..."
 # faster-whisper utilise CTranslate2 — pas de pkg_resources, pas de PyTorch requis
 "$PYTHON3" -m pip install -r "$REPO_ROOT/app/backend/requirements.txt" --break-system-packages
 
-# --- 4. Create .app structure ---
+# --- 5. Create .app structure ---
 echo "Création du bundle .app..."
-rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 # Copy backend source into Resources
 cp -r "$REPO_ROOT/app/backend/." "$APP_BUNDLE/Contents/Resources/"
 
-# --- 5. Write shell launcher ---
+# Copy SCRecorder binary into bundle (must happen AFTER rm -rf above)
+cp "$DEV_BIN" "$APP_BUNDLE/Contents/Resources/SCRecorder"
+echo "  → SCRecorder copié (bundle) : $APP_BUNDLE/Contents/Resources/SCRecorder"
+
+# --- 6. Write shell launcher ---
 LAUNCHER="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cat > "$LAUNCHER" << SHELLSCRIPT
 #!/bin/bash
@@ -72,7 +101,7 @@ exec "$PYTHON3" launcher.py
 SHELLSCRIPT
 chmod +x "$LAUNCHER"
 
-# --- 6. Copy icon ---
+# --- 7. Copy icon ---
 if [ -f "$REPO_ROOT/app/packaging/macos/icon.icns" ]; then
     cp "$REPO_ROOT/app/packaging/macos/icon.icns" "$APP_BUNDLE/Contents/Resources/icon.icns"
 fi
@@ -81,12 +110,12 @@ if [ -f "$REPO_ROOT/app/packaging/macos/icon.png" ]; then
     cp "$REPO_ROOT/app/packaging/macos/icon.png" "$APP_BUNDLE/Contents/Resources/icon.png"
 fi
 
-# --- 7. Generate Info.plist from template ---
+# --- 8. Generate Info.plist from template ---
 sed "s/{{VERSION}}/$APP_VERSION/g" \
     "$REPO_ROOT/app/packaging/macos/Info.plist.template" \
     > "$APP_BUNDLE/Contents/Info.plist"
 
-# --- 8. Create Desktop alias ---
+# --- 9. Create Desktop alias ---
 DESKTOP_ALIAS="$HOME/Desktop/$APP_NAME.app"
 if [ -e "$DESKTOP_ALIAS" ]; then
     rm -f "$DESKTOP_ALIAS"

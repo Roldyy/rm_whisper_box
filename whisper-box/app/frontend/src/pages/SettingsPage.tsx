@@ -4,7 +4,7 @@ import { useSettings, useUpdateSettings, useOpenDataDir } from '../api/settings'
 import apiClient, { HealthResponse, Settings } from '../api/client'
 import { useAppStore } from '../stores/appStore'
 
-const MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const
+const MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'large-v3-turbo'] as const
 const LANGUAGES: { value: string; label: string }[] = [
   { value: '', label: 'Auto-détection' },
   { value: 'fr', label: 'Français' },
@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const setStoreSettings = useAppStore((s) => s.setSettings)
 
   const [form, setForm] = useState<Settings>({
-    default_model: 'base',
+    default_model: 'large-v3-turbo',
     default_language: '',
     default_output_format: 'txt',
     default_output_dir: '',
@@ -41,7 +41,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (settings) {
       setForm({
-        default_model: settings.default_model ?? 'base',
+        default_model: settings.default_model ?? 'large-v3-turbo',
         default_language: settings.default_language ?? '',
         default_output_format: settings.default_output_format ?? 'txt',
         default_output_dir: settings.default_output_dir ?? '',

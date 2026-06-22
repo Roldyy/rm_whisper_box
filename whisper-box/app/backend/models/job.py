@@ -17,6 +17,7 @@ class TranscriptionJob(Base):
     model: Mapped[str] = mapped_column(Text, nullable=False)
     language: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_format: Mapped[str] = mapped_column(Text, nullable=False)
+    output_dir: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
     progress: Mapped[int] = mapped_column(Integer, default=0)
