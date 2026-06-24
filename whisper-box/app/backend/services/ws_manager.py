@@ -12,7 +12,7 @@ from collections import defaultdict
 from typing import Any
 
 from fastapi import WebSocket
-from starlette.websockets import WebSocketDisconnect, WebSocketState
+from starlette.websockets import WebSocketState
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class ConnectionManager:
                     await ws.send_text(json.dumps(payload))
                 else:
                     dead.append(ws)
-            except (WebSocketDisconnect, RuntimeError, Exception):
+            except Exception:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(job_id, ws)

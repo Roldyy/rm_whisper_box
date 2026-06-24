@@ -157,10 +157,10 @@ export default function TranscribePage() {
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                  Transcription en cours… {percent}%
+                  {percent > 0 ? `Transcription en cours… ${percent}%` : 'Transcription en cours…'}
                 </span>
               </div>
-              <ProgressBar percent={percent} />
+              <ProgressBar percent={percent} indeterminate={percent === 0} />
               <LogViewer logs={logs} className="h-40" />
             </>
           )}

@@ -53,6 +53,12 @@ export interface Settings {
   default_language: string
   default_output_format: string
   default_output_dir: string
+  // Claude (IA) settings
+  claude_enabled?: string
+  claude_token_present?: string
+  claude_model?: string
+  claude_default_mode?: string
+  claude_auto_after_transcribe?: string
 }
 
 export interface HealthResponse {

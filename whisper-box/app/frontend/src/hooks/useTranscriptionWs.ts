@@ -29,6 +29,14 @@ interface WsErrorEvent {
 
 type WsEvent = WsProgressEvent | WsLogEvent | WsDoneEvent | WsErrorEvent
 
+// Reconnect backoff (ms) — capped so a backend hiccup doesn't strand the UI.
+const MAX_RECONNECT_DELAY = 5000
+
+function wsUrl(jobId: number): string {
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${window.location.host}/api/ws/${jobId}`
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────
 
 export function useTranscriptionWs(jobId: number | null) {
@@ -39,52 +47,91 @@ export function useTranscriptionWs(jobId: number | null) {
   useEffect(() => {
     if (jobId === null) return
 
-    const url = `ws://127.0.0.1:7843/api/ws/${jobId}`
-    const ws = new WebSocket(url)
-    wsRef.current = ws
+    // Track timers and lifecycle so cleanup never fires against a stale job,
+    // and so an intentional close doesn't trigger a reconnect.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let disposed = false
+    let finished = false
+    let reconnectAttempt = 0
 
-    ws.onmessage = (event: MessageEvent) => {
-      let parsed: WsEvent
-      try {
-        parsed = JSON.parse(event.data as string) as WsEvent
-      } catch {
-        return
+    const schedule = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(fn, ms))
+    }
+
+    function connect() {
+      if (disposed) return
+
+      const ws = new WebSocket(wsUrl(jobId as number))
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        reconnectAttempt = 0
       }
 
-      switch (parsed.type) {
-        case 'progress':
-          updateJobProgress(jobId, parsed.percent, parsed.segment)
-          break
-
-        case 'log':
-          appendLog(jobId, parsed.message)
-          break
-
-        case 'done': {
-          void queryClient.invalidateQueries({ queryKey: jobKeys.all })
-          void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) })
-          setTimeout(() => { clearJob(jobId); setActiveJob(null) }, 3000)
-          ws.close()
-          break
+      ws.onmessage = (event: MessageEvent) => {
+        let parsed: WsEvent
+        try {
+          parsed = JSON.parse(event.data as string) as WsEvent
+        } catch {
+          return
         }
 
-        case 'error': {
-          setJobError(jobId, parsed.message)
-          void queryClient.invalidateQueries({ queryKey: jobKeys.all })
-          void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) })
-          setTimeout(() => { clearJob(jobId); setActiveJob(null) }, 5000)
-          ws.close()
-          break
+        switch (parsed.type) {
+          case 'progress':
+            updateJobProgress(jobId as number, parsed.percent, parsed.segment)
+            break
+
+          case 'log':
+            appendLog(jobId as number, parsed.message)
+            break
+
+          case 'done': {
+            finished = true
+            void queryClient.invalidateQueries({ queryKey: jobKeys.all })
+            void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId as number) })
+            schedule(() => {
+              clearJob(jobId as number)
+              setActiveJob(null)
+            }, 3000)
+            ws.close()
+            break
+          }
+
+          case 'error': {
+            finished = true
+            setJobError(jobId as number, parsed.message)
+            void queryClient.invalidateQueries({ queryKey: jobKeys.all })
+            void queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId as number) })
+            schedule(() => {
+              clearJob(jobId as number)
+              setActiveJob(null)
+            }, 5000)
+            ws.close()
+            break
+          }
         }
+      }
+
+      ws.onerror = () => {
+        void queryClient.invalidateQueries({ queryKey: jobKeys.all })
+      }
+
+      ws.onclose = () => {
+        // Reconnect only if the job is still in flight and we didn't tear down
+        // the hook ourselves (e.g. transient backend restart / network blip).
+        if (disposed || finished) return
+        reconnectAttempt += 1
+        const delay = Math.min(500 * 2 ** (reconnectAttempt - 1), MAX_RECONNECT_DELAY)
+        schedule(connect, delay)
       }
     }
 
-    ws.onerror = () => {
-      void queryClient.invalidateQueries({ queryKey: jobKeys.all })
-    }
+    connect()
 
     return () => {
-      ws.close()
+      disposed = true
+      timers.forEach(clearTimeout)
+      wsRef.current?.close()
       wsRef.current = null
     }
   }, [jobId, queryClient, updateJobProgress, appendLog, clearJob, setJobError, setActiveJob])

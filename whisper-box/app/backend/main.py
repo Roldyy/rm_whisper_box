@@ -26,6 +26,7 @@ from api.settings import router as settings_router
 from api.ws import router as ws_router
 from api.recording import router as recording_router
 from api.system import router as system_router
+from api.claude import router as claude_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +40,8 @@ async def lifespan(app: FastAPI):
     """Startup: init DB + start background worker. Shutdown: clean up."""
     logger.info("Starting %s...", APP_NAME)
     await init_db()
+    from api.system import prune_uploads
+    prune_uploads()
     asyncio.create_task(job_queue.start_worker())
     logger.info("%s ready", APP_NAME)
     yield
@@ -68,6 +71,7 @@ app.include_router(settings_router)
 app.include_router(ws_router)
 app.include_router(recording_router)
 app.include_router(system_router)
+app.include_router(claude_router)
 
 # Static files (built frontend) — mounted only if directory exists
 _static_dir = Path(__file__).parent / "static"

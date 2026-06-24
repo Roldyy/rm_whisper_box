@@ -1,24 +1,57 @@
-import { useState, ChangeEvent } from 'react'
+import { useState, useRef, ChangeEvent } from 'react'
 import { FileAudio, FolderOpen, Loader2 } from 'lucide-react'
-import apiClient from '../api/client'
+import axios from 'axios'
 
 interface FileDropZoneProps {
   value: string
   onChange: (path: string) => void
 }
 
-export default function FileDropZone({ value, onChange }: FileDropZoneProps) {
-  const [picking, setPicking] = useState(false)
+// Mirrors SUPPORTED_EXTENSIONS on the backend.
+const ACCEPT = '.mp3,.mp4,.wav,.m4a,.ogg,.flac,.webm,.mkv,.avi,.mov,.aac'
 
-  async function handleNativePick() {
-    setPicking(true)
+export default function FileDropZone({ value, onChange }: FileDropZoneProps) {
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function openPicker() {
+    inputRef.current?.click()
+  }
+
+  async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Reset so picking the same file again still fires onChange.
+    e.target.value = ''
+    if (!file) return
+
+    setError(null)
+    setUploading(true)
+    setProgress(0)
     try {
-      const { data } = await apiClient.get<{ path: string | null }>('/api/pick-file')
+      const formData = new FormData()
+      formData.append('file', file)
+      // Use the bare axios instance (not apiClient) so the browser sets the
+      // multipart Content-Type with its boundary; our shared client forces
+      // application/json, which breaks multipart parsing.
+      const { data } = await axios.post<{ path: string }>(
+        `${window.location.origin}/api/upload`,
+        formData,
+        {
+          onUploadProgress: (evt) => {
+            if (evt.total) setProgress(Math.round((evt.loaded / evt.total) * 100))
+          },
+        },
+      )
       if (data.path) onChange(data.path)
-    } catch {
-      // user cancelled or backend doesn't support it yet
+    } catch (err) {
+      const msg = axios.isAxiosError(err)
+        ? ((err.response?.data as { detail?: string } | undefined)?.detail ?? err.message)
+        : 'Échec du téléversement du fichier.'
+      setError(msg)
     } finally {
-      setPicking(false)
+      setUploading(false)
     }
   }
 
@@ -27,18 +60,31 @@ export default function FileDropZone({ value, onChange }: FileDropZoneProps) {
 
   return (
     <div className="space-y-3">
-      {/* Native macOS file picker */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT}
+        className="hidden"
+        onChange={handleFileSelected}
+      />
+
+      {/* Browser-native file picker (instant) + upload */}
       <button
         type="button"
-        onClick={handleNativePick}
-        disabled={picking}
+        onClick={openPicker}
+        disabled={uploading}
         className={`relative w-full cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors disabled:cursor-not-allowed ${
           isAbsolute
             ? 'border-violet-600/50 bg-gray-800/50'
             : 'border-gray-600 hover:border-gray-500 bg-gray-800/50'
         }`}
       >
-        {displayName ? (
+        {uploading ? (
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+            <p className="text-sm text-gray-400">Téléversement… {progress}%</p>
+          </div>
+        ) : displayName ? (
           <div className="flex flex-col items-center gap-2">
             <FileAudio className={`w-8 h-8 ${isAbsolute ? 'text-violet-400' : 'text-amber-400'}`} />
             <span className={`text-sm font-medium break-all ${isAbsolute ? 'text-violet-300' : 'text-amber-300'}`}>
@@ -48,17 +94,9 @@ export default function FileDropZone({ value, onChange }: FileDropZoneProps) {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            {picking ? (
-              <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-            ) : (
-              <FolderOpen className="w-8 h-8 text-gray-500" />
-            )}
+            <FolderOpen className="w-8 h-8 text-gray-500" />
             <p className="text-sm text-gray-400">
-              {picking ? 'En attente de la sélection…' : (
-                <>
-                  Cliquer pour <span className="text-violet-400 underline">choisir un fichier</span>
-                </>
-              )}
+              Cliquer pour <span className="text-violet-400 underline">choisir un fichier</span>
             </p>
             <p className="text-xs text-gray-600">
               MP3 · MP4 · WAV · M4A · OGG · FLAC · WEBM · MKV · AVI · MOV · AAC
@@ -67,7 +105,9 @@ export default function FileDropZone({ value, onChange }: FileDropZoneProps) {
         )}
       </button>
 
-      {/* Manual absolute path */}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      {/* Manual absolute path — for files already on disk */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">
           Ou saisir un chemin absolu

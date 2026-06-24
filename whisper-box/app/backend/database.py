@@ -37,8 +37,6 @@ async def get_db():
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 def _add_missing_columns(conn):

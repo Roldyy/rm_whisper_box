@@ -22,7 +22,6 @@ if _BACKEND_DIR not in sys.path:
 import requests  # noqa: E402
 import uvicorn   # noqa: E402
 import rumps     # noqa: E402
-from services.status_bridge import poll as _poll_status  # noqa: E402
 
 APP_URL = "http://127.0.0.1:7843"
 
@@ -81,8 +80,6 @@ class WhisperBoxMenuBar(rumps.App):
         )
         self._is_recording = False
         self._rec_elapsed = 0.0
-        self._txn_running = False
-        self._txn_percent = 0
 
         self._record_item = rumps.MenuItem(
             "Démarrer l'enregistrement", callback=self._toggle_recording
@@ -154,11 +151,10 @@ class WhisperBoxMenuBar(rumps.App):
     @rumps.timer(2)
     def _poll_status(self, _):
         """
-        Runs in the main thread — reads the status_bridge queue.Queue and the
-        backend's recording status over local HTTP.
+        Runs in the main thread — reads the backend's recording status over
+        local HTTP so the menu stays in sync even when controlled from the web UI.
         NEVER use asyncio here — NSRunLoop and asyncio cannot share a loop.
         """
-        # Recording state (so the menu stays in sync even when controlled from the web UI)
         try:
             rec = requests.get(f"{APP_URL}/api/recording/status", timeout=1).json()
             self._rec_elapsed = rec.get("elapsed_seconds", 0.0)
@@ -167,17 +163,10 @@ class WhisperBoxMenuBar(rumps.App):
         except Exception:
             pass
 
-        # Transcription progress (in-process queue from whisper_runner)
-        status = _poll_status()
-        if status is not None:
-            self._txn_running = status.get("running", False)
-            self._txn_percent = status.get("percent", 0)
-
-        # Title priority: recording > transcription > idle
+        # Title: recording indicator only. Transcription progress is shown in
+        # the web UI, not the menu bar.
         if self._is_recording:
             self.title = f"🔴 {_fmt_elapsed(self._rec_elapsed)}"
-        elif self._txn_running:
-            self.title = f"⏳ {self._txn_percent}%"
         else:
             self.title = None
 
