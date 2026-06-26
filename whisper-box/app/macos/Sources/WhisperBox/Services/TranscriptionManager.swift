@@ -121,6 +121,7 @@ final class TranscriptionManager {
                 runs[jobID]?.status = .cancelled
                 job.status = .cancelled
                 try? modelContext?.save()
+                Log.transcription.info("Transcription annulée", job: job)
             } else {
                 runs[jobID]?.segments = segs
                 runs[jobID]?.progress = 1
@@ -137,6 +138,7 @@ final class TranscriptionManager {
                 job.outputFormat = fmt.rawValue
                 job.transcriptText = OutputFormatter.render(segs, as: .txt)
                 try? modelContext?.save()
+                Log.transcription.success("Transcription terminée", job: job, detail: "\(segs.count) segments")
 
                 if let s = settings(), s.claudeEnabled, s.claudeAutoAfterTranscribe {
                     enhance(jobID: jobID)
@@ -148,6 +150,7 @@ final class TranscriptionManager {
             job.status = .error
             job.errorMessage = error.localizedDescription
             try? modelContext?.save()
+            Log.transcription.error("Échec de la transcription", job: job, detail: error.localizedDescription)
         }
         tasks[jobID] = nil
         if !hasRunningJobs { power.release() }
@@ -160,6 +163,7 @@ final class TranscriptionManager {
         guard EnhancementService.isAvailable else {
             enhancements[jobID] = EnhancementState(running: false,
                 error: "CLI « claude » introuvable — installez @anthropic-ai/claude-code et connectez-vous.")
+            Log.enhancement.warning("CLI « claude » introuvable", job: job)
             return
         }
         let text = job.transcriptText
@@ -176,8 +180,10 @@ final class TranscriptionManager {
                 enhancements[jobID] = EnhancementState(running: false, text: result)
                 job.summaryPath = url.path
                 try? modelContext?.save()
+                Log.enhancement.success("Résumé Claude généré", job: job)
             } catch {
                 enhancements[jobID] = EnhancementState(running: false, error: error.localizedDescription)
+                Log.enhancement.error("Échec du résumé Claude", job: job, detail: error.localizedDescription)
             }
         }
     }

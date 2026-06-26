@@ -61,7 +61,8 @@ final class RecordingService {
         var mic: MicCapturer?
         if captureMic {
             let m = MicCapturer(sourceIndex: captureSystem ? 1 : 0)
-            if (try? m.prepare()) != nil { mic = m }
+            do { try m.prepare(); mic = m }
+            catch { Log.recording.warning("Préparation du micro échouée", detail: error.localizedDescription) }
         }
         let count = (captureSystem ? 1 : 0) + (mic != nil ? 1 : 0)
         guard count > 0 else {
@@ -71,7 +72,11 @@ final class RecordingService {
         let mixer = AudioMixer(writer: writer, sourceCount: count)
         if let m = mic {
             m.mixer = mixer
-            do { try m.start() } catch { mixer.finish(source: m.sourceIndex); mic = nil }
+            do { try m.start() } catch {
+                Log.recording.warning("Démarrage du micro échoué — enregistrement sans micro",
+                                      detail: error.localizedDescription)
+                mixer.finish(source: m.sourceIndex); mic = nil
+            }
         }
 
         if liveEnabled {
@@ -97,6 +102,7 @@ final class RecordingService {
             let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
             let cap = SystemAudioCapturer(mixer: mixer, sourceIndex: 0)
             cap.onStop = { [weak self] err in
+                Log.recording.error("Flux audio système interrompu", detail: err.localizedDescription)
                 Task { @MainActor in self?.lastError = err.localizedDescription }
             }
             let s = SCStream(filter: filter, configuration: config, delegate: cap)
@@ -112,6 +118,8 @@ final class RecordingService {
         power.acquire(reason: "WhisperBox enregistre")
         transcriptionManager?.prewarm()
         startTimer()
+        Log.recording.success("Enregistrement démarré",
+                              detail: "système: \(captureSystem ? "oui" : "non") · micro: \(mic != nil ? "oui" : "non")")
     }
 
     func pause() {
@@ -135,7 +143,10 @@ final class RecordingService {
     func stop(finishLive: Bool = true) async -> URL? {
         guard state == .recording || state == .paused else { return outputURL }
         timer?.invalidate(); timer = nil
-        if let stream { try? await stream.stopCapture() }
+        if let stream {
+            do { try await stream.stopCapture() }
+            catch { Log.recording.error("Arrêt de la capture système échoué", detail: error.localizedDescription) }
+        }
         if systemCapturer != nil { mixer?.finish(source: 0) }   // system is source 0 when present
         micCapturer?.stop()                                     // removes tap, then finishes mic's source
         writer?.finalize()
@@ -144,6 +155,7 @@ final class RecordingService {
         let url = outputURL
         state = .stopped
         cleanup()
+        if let url { Log.recording.success("Enregistrement enregistré", detail: url.lastPathComponent) }
         return url
     }
 

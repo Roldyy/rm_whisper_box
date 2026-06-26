@@ -7,7 +7,7 @@ struct WhisperBoxApp: App {
     /// SwiftData container for jobs / logs / settings (local store in Application Support).
     let container: ModelContainer = {
         do {
-            return try ModelContainer(for: TranscriptionJob.self, AppSettings.self)
+            return try ModelContainer(for: TranscriptionJob.self, AppSettings.self, ExecutionLog.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

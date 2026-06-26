@@ -42,6 +42,8 @@ struct RootView: View {
         .onAppear {
             manager.modelContext = context
             recorder.transcriptionManager = manager
+            AppLog.shared.modelContext = context
+            AppLog.shared.prune()
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)) { _ in
             Task { await recorder.handleSystemWillSleep() }

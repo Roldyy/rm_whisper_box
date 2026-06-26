@@ -8,6 +8,38 @@ enum JobStatus: String, Codable {
     case pending, running, paused, success, error, cancelled
 }
 
+enum LogLevel: String, Codable, CaseIterable {
+    case debug, info, success, warning, error
+}
+
+/// Persisted app event — revives the old backend's `execution_logs`. Feeds the
+/// Logs tab and the per-job "Journaux" view; also mirrored to `os.Logger`.
+/// `job` is optional (nil = app-level event) and cascades from `TranscriptionJob`.
+@Model
+final class ExecutionLog {
+    var id: UUID = UUID()
+    var createdAt: Date = Date()
+    var levelRaw: String = LogLevel.info.rawValue
+    var operationType: String = "app"   // app | recording | transcription | enhancement | model
+    var message: String = ""            // one-line summary (list row)
+    var logContent: String?             // full detail (shown on tap)
+    var job: TranscriptionJob?          // optional link; nil = app-level event
+
+    var level: LogLevel {
+        get { LogLevel(rawValue: levelRaw) ?? .info }
+        set { levelRaw = newValue.rawValue }
+    }
+
+    init(level: LogLevel, operationType: String, message: String,
+         logContent: String? = nil, job: TranscriptionJob? = nil) {
+        self.levelRaw = level.rawValue
+        self.operationType = operationType
+        self.message = message
+        self.logContent = logContent
+        self.job = job
+    }
+}
+
 @Model
 final class TranscriptionJob {
     var id: UUID = UUID()
@@ -39,6 +71,10 @@ final class TranscriptionJob {
 
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+
+    // Logs attached to this job — deleted with it (mirrors the old FK CASCADE).
+    @Relationship(deleteRule: .cascade, inverse: \ExecutionLog.job)
+    var logs: [ExecutionLog] = []
 
     var status: JobStatus {
         get { JobStatus(rawValue: statusRaw) ?? .pending }

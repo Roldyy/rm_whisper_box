@@ -144,6 +144,8 @@ struct LivePanel: View {
     var live: Bool = false
     var caption: String = "Texte nettoyé · horodaté par segment"
     let segments: [TranscriptSegment]
+    /// Number of trailing segments still being refined (the live hypothesis tail).
+    var unconfirmedCount: Int = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -165,7 +167,8 @@ struct LivePanel: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(segments) { seg in
+                    ForEach(Array(segments.enumerated()), id: \.element.id) { idx, seg in
+                        let isUnconfirmed = idx >= segments.count - unconfirmedCount
                         HStack(alignment: .top, spacing: 14) {
                             Text(timestamp(seg.start))
                                 .font(.system(size: 12, design: .monospaced))
@@ -176,6 +179,7 @@ struct LivePanel: View {
                                 .foregroundStyle(Theme.bodyText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .opacity(isUnconfirmed ? 0.5 : 1)
                         .padding(.vertical, 7)
                         Rectangle().fill(Theme.hairline).frame(height: 1)
                     }

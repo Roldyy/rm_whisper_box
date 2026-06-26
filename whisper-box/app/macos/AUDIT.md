@@ -1,7 +1,9 @@
 # WhisperBox (native macOS) — Implementation Audit
 
 Snapshot of the Swift app: **cleanly layered, building green.** Purpose: track health
-and next steps. _Last updated: 2026-06-26 — quick-wins batch (#1–#6, #8, #13) landed._
+and next steps. _Last updated: 2026-06-26 — logging layer (#18) landed; live transcriber
+reworked (rolling buffer + VAD + confirmed/unconfirmed, ported from WhisperKit's
+AudioStreamTranscriber)._
 
 ## Résumé — what's built
 - **Architecture:** app-scoped `@Observable` services (`TranscriptionManager`, `RecordingService`)
@@ -49,9 +51,21 @@ and next steps. _Last updated: 2026-06-26 — quick-wins batch (#1–#6, #8, #13
 15. **Swift 5 language mode** — Swift 6 strict concurrency would surface a few `@Sendable`
     issues (currently fine).
 16. **Notarization** (Tier 2) for distribution beyond a few beta testers.
+17. **Configurable output directories** — output is currently hardcoded to
+    `~/Whisper Memory/transcripts/` (and the recordings dir). Let the user choose where
+    transcripts / summaries / recordings are written. This is what `defaultOutputDir`
+    (#7) was meant for — wire it up (folder picker in Settings, security-scoped bookmark)
+    instead of dropping it.
+18. ✅ **Real logging** — `Log` facade over `os.Logger` + persisted `ExecutionLog`
+    (`Services/Log.swift`, `Models.swift`): levels info/success/warning/error, optional
+    `job` relationship with `.cascade` delete. Rebuilt the "Journaux" tab (filter, detail
+    sheet, Export, Clear) and added a per-job "Journaux" tab in `JobDetailView`. Launch-time
+    prune (14 days / 2000 cap). Key failure + success sites instrumented (recording,
+    transcription, enhancement).
 
 ## Remaining next steps
 - Polish: History search (#9), audio duration (#10), menu-bar red glyph (#11).
+- Feature: configurable output directories (#17) — wire up `defaultOutputDir` (#7).
 - Robustness: transcription sleep-checkpoint (#12), test target (#14).
 - Distribution: notarization (#16) when going beyond beta testers.
-- Tidy: drop the unused `defaultModel`/`defaultOutputDir` settings (#7).
+- Tidy: drop the unused `defaultModel` setting (#7).

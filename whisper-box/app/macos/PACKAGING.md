@@ -1,14 +1,19 @@
 # Packaging WhisperBox → .dmg
 
-## Tier 1 — signed (Apple Development), not notarized — for you + beta testers
+## Tier 1 — ad-hoc signed, not notarized — for you + beta testers
 
 Build the `.dmg`:
 ```bash
 cd whisper-box/app/macos
 bash build-dmg.sh
 ```
-Produces `WhisperBox.dmg` (the app + an Applications drag-target), signed with your
-Apple Development certificate (Team `66UL8CW95D`).
+Produces `WhisperBox.dmg` (app + Applications drag-target), **ad-hoc signed** (`-`) — no
+Apple account/team/profile needed, so it builds headlessly. Fine for a beta.
+
+> **Team-signed build (more stable TCC):** headless `xcodebuild` can't use a free Personal
+> Team account, so for an Apple-Development-signed build, **build in the Xcode GUI** instead
+> (`open WhisperBox.xcodeproj` → Run/Archive — `project.yml` keeps Team `66UL8CW95D`), then
+> package that `.app`. The script stays ad-hoc on purpose.
 
 ### What a beta tester does on first launch
 The app isn't notarized, so macOS shows a Gatekeeper warning once. To open:

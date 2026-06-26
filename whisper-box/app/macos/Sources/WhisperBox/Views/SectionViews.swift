@@ -261,7 +261,8 @@ struct RecordView: View {
 
             if recorder.liveEnabled {
                 LivePanel(title: "Transcription en direct", live: recorder.state == .recording,
-                          segments: recorder.live.segments)
+                          segments: recorder.live.segments,
+                          unconfirmedCount: recorder.live.unconfirmedSegments.count)
                     .padding(.top, 22)
             }
             Spacer(minLength: 0)
@@ -450,6 +451,7 @@ struct JobDetailView: View {
     }
 
     @State private var tab = 0
+    @State private var selectedLog: ExecutionLog?
     private var isRecording: Bool { job.sourcePath.contains("/Whisper Memory/recordings/") }
     private var base: String { URL(fileURLWithPath: job.sourcePath).deletingPathExtension().lastPathComponent }
 
@@ -481,6 +483,7 @@ struct JobDetailView: View {
             HStack(spacing: 4) {
                 tabButton("Transcription", 0)
                 tabButton("Résumé Claude", 1)
+                tabButton("Journaux", 2)
                 Spacer()
             }
             .padding(.horizontal, 22)
@@ -488,26 +491,44 @@ struct JobDetailView: View {
 
             // Body
             ScrollView {
-                Group {
-                    if tab == 0 {
-                        Text(job.transcriptText.isEmpty ? "(transcription vide)" : job.transcriptText)
-                            .textSelection(.enabled)
-                    } else if manager.enhancements[job.id]?.running == true {
-                        HStack(spacing: 9) {
-                            ProgressView().controlSize(.small)
-                            Text("Génération du résumé…").foregroundStyle(Theme.textSecondary)
+                if tab == 2 {
+                    let sorted = job.logs.sorted { $0.createdAt > $1.createdAt }
+                    VStack(spacing: 8) {
+                        if sorted.isEmpty {
+                            Text("Aucun journal pour cette tâche.")
+                                .font(.system(size: 13)).foregroundStyle(Theme.textTertiary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            ForEach(sorted) { log in
+                                Button { selectedLog = log } label: { Card(padding: 12) { LogRow(log: log) } }
+                                    .buttonStyle(.plain)
+                            }
                         }
-                    } else if let err = manager.enhancements[job.id]?.error {
-                        Text(err).foregroundStyle(Theme.redDim)
-                    } else {
-                        Text(summaryText ?? "Aucun résumé — cliquez sur « Résumé Claude » ci-dessous.")
-                            .textSelection(.enabled)
                     }
+                    .padding(.horizontal, 22).padding(.vertical, 16)
+                } else {
+                    Group {
+                        if tab == 0 {
+                            Text(job.transcriptText.isEmpty ? "(transcription vide)" : job.transcriptText)
+                                .textSelection(.enabled)
+                        } else if manager.enhancements[job.id]?.running == true {
+                            HStack(spacing: 9) {
+                                ProgressView().controlSize(.small)
+                                Text("Génération du résumé…").foregroundStyle(Theme.textSecondary)
+                            }
+                        } else if let err = manager.enhancements[job.id]?.error {
+                            Text(err).foregroundStyle(Theme.redDim)
+                        } else {
+                            Text(summaryText ?? "Aucun résumé — cliquez sur « Résumé Claude » ci-dessous.")
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .font(.system(size: 14)).lineSpacing(3).foregroundStyle(Theme.bodyText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 22).padding(.vertical, 16)
                 }
-                .font(.system(size: 14)).lineSpacing(3).foregroundStyle(Theme.bodyText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 22).padding(.vertical, 16)
             }
+            .sheet(item: $selectedLog) { LogDetailSheet(log: $0) }
 
             // Action bar
             Rectangle().fill(Theme.border).frame(height: 1)
@@ -576,36 +597,149 @@ enum Exporter {
     }
 }
 
-struct LogsView: View {
-    @Query(sort: \TranscriptionJob.createdAt, order: .reverse) private var jobs: [TranscriptionJob]
+/// Colored pill for a log level (matches StatusBadge styling).
+struct LogLevelBadge: View {
+    let level: LogLevel
+    private var color: Color {
+        switch level {
+        case .error:   return Theme.red
+        case .warning: return .orange
+        case .success: return Theme.green
+        case .info:    return Theme.accent
+        case .debug:   return Theme.gray
+        }
+    }
     var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                ForEach(jobs) { job in
-                    Card(padding: 13) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(job.sourceFilename).font(.system(size: 13.5, weight: .medium)).lineLimit(1)
-                                Spacer()
-                                StatusBadge(status: job.status)
-                            }
-                            if let e = job.errorMessage, !e.isEmpty {
-                                Text(e).font(.system(size: 12)).foregroundStyle(Theme.redDim)
-                            }
-                            Text("\(job.model) · \(job.createdAt.formatted(date: .numeric, time: .standard))")
-                                .font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                        }
+        Text(level.rawValue.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(color.opacity(0.16), in: Capsule())
+            .foregroundStyle(color)
+    }
+}
+
+/// One log entry as a card row (used in the Logs tab and the per-job tab).
+struct LogRow: View {
+    let log: ExecutionLog
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                LogLevelBadge(level: log.level)
+                Text(log.operationType).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                Spacer()
+                Text(log.createdAt.formatted(date: .numeric, time: .standard))
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.textTertiary)
+            }
+            Text(log.message).font(.system(size: 13.5)).foregroundStyle(Theme.bodyText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let c = log.logContent, !c.isEmpty {
+                Text(c).font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// Full detail of a single log entry.
+struct LogDetailSheet: View {
+    let log: ExecutionLog
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 9) {
+                        LogLevelBadge(level: log.level)
+                        Text(log.operationType).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                    }
+                    Text(log.createdAt.formatted(date: .long, time: .standard))
+                        .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)) }
+                    .buttonStyle(.plain).frame(width: 28, height: 28)
+                    .background(Theme.control, in: Circle()).foregroundStyle(Theme.gray)
+            }
+            .padding(18)
+            Rectangle().fill(Theme.border).frame(height: 1)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(log.message).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.textPrimary)
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    if let c = log.logContent, !c.isEmpty {
+                        Text(c).font(.system(size: 13, design: .monospaced)).foregroundStyle(Theme.bodyText)
+                            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if let j = log.job {
+                        Text("Tâche : \(j.sourceFilename)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                 }
+                .padding(20)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 34).padding(.vertical, 26)
+        }
+        .frame(width: 560, height: 420)
+        .background(Theme.sheet)
+    }
+}
+
+struct LogsView: View {
+    @Query(sort: \ExecutionLog.createdAt, order: .reverse) private var logs: [ExecutionLog]
+    @State private var levelFilter: LogLevel?
+    @State private var selected: ExecutionLog?
+
+    private var filtered: [ExecutionLog] {
+        guard let levelFilter else { return logs }
+        return logs.filter { $0.level == levelFilter }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Menu {
+                    Button("Tous les niveaux") { levelFilter = nil }
+                    Divider()
+                    ForEach(LogLevel.allCases, id: \.self) { lvl in
+                        Button(lvl.rawValue.capitalized) { levelFilter = lvl }
+                    }
+                } label: {
+                    Label(levelFilter?.rawValue.capitalized ?? "Tous les niveaux",
+                          systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .menuStyle(.button).buttonStyle(SecondaryButton()).fixedSize()
+                Spacer()
+                Button("Exporter") { Exporter.save(text: exportText(), suggestedName: "whisperbox-journaux.log") }
+                    .buttonStyle(SecondaryButton()).disabled(logs.isEmpty)
+                Button("Vider", role: .destructive) { AppLog.shared.clearAll() }
+                    .buttonStyle(SecondaryButton()).disabled(logs.isEmpty)
+            }
+            .padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 12)
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(filtered) { log in
+                        Button { selected = log } label: { Card(padding: 13) { LogRow(log: log) } }
+                            .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 34).padding(.bottom, 26)
+            }
         }
         .overlay {
-            if jobs.isEmpty {
+            if logs.isEmpty {
                 ContentUnavailableView("Aucun journal", systemImage: "text.alignleft")
             }
         }
+        .sheet(item: $selected) { LogDetailSheet(log: $0) }
+    }
+
+    private func exportText() -> String {
+        filtered.map { log in
+            let ts = log.createdAt.formatted(date: .numeric, time: .standard)
+            let head = "[\(ts)] \(log.level.rawValue.uppercased()) \(log.operationType): \(log.message)"
+            if let c = log.logContent, !c.isEmpty { return head + "\n    " + c }
+            return head
+        }.joined(separator: "\n")
     }
 }
 
@@ -699,6 +833,13 @@ struct SettingsView: View {
                     }
                     Text("Si le CLI claude est déjà connecté, laissez vide. Sinon, collez un token OAuth.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                    if !EnhancementService.isAvailable {
+                        Text("1. Installez le CLI :  npm install -g @anthropic-ai/claude-code")
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .foregroundStyle(Theme.textTertiary).textSelection(.enabled)
+                    }
+                    Text("Pour générer un token : lancez «\u{00a0}claude setup-token\u{00a0}» dans le Terminal, puis collez-le ci-dessous. (Ou lancez «\u{00a0}claude\u{00a0}» une fois pour vous connecter — aucun token requis.)")
+                        .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).textSelection(.enabled)
                     Card {
                         VStack(spacing: 10) {
                             SecureField("CLAUDE_CODE_OAUTH_TOKEN", text: $token).textFieldStyle(.roundedBorder)
