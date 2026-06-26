@@ -52,22 +52,6 @@ final class TranscriptionJob {
 }
 
 @Model
-final class ExecutionLog {
-    var id: UUID = UUID()
-    var jobID: UUID?
-    var operationType: String = ""
-    var status: String = ""
-    var logContent: String = ""
-    var createdAt: Date = Date()
-
-    init(operationType: String, status: String, logContent: String = "") {
-        self.operationType = operationType
-        self.status = status
-        self.logContent = logContent
-    }
-}
-
-@Model
 final class AppSettings {
     var defaultModel: String = "openai_whisper-large-v3-v20240930_turbo"
     var defaultLanguage: String = ""        // "" = auto

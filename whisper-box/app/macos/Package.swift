@@ -22,7 +22,10 @@ let package = Package(
             name: "WhisperBox",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
-            ]
+            ],
+            // The asset catalog is consumed by the Xcode app target (xcodegen),
+            // not the SwiftPM build — exclude it to avoid an unhandled-resource warning.
+            exclude: ["Assets.xcassets"]
         ),
     ]
 )

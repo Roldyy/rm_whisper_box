@@ -14,6 +14,7 @@ final class TranscriptionManager {
         var liveText: String = ""
         var status: JobStatus = .running
         var segments: [TranscriptSegment] = []
+        var preparingModel = false        // first-run model load/download
     }
 
     /// Claude enhancement state per job.
@@ -44,10 +45,30 @@ final class TranscriptionManager {
         let id = job.id
         runs[id] = RunState()
         power.acquire(reason: "WhisperBox transcrit")
+        let lang = language ?? transcriptionLanguage()
         tasks[id] = Task { [weak self] in
-            await self?.run(jobID: id, job: job, filePath: filePath, language: language)
+            await self?.run(jobID: id, job: job, filePath: filePath, language: lang)
         }
         return id
+    }
+
+    /// Configured transcription language ("" = auto-detect → nil).
+    func transcriptionLanguage() -> String? {
+        let l = settings()?.defaultLanguage ?? ""
+        return l.isEmpty ? nil : l
+    }
+
+    /// All transcripts/summaries are written here (not next to the source file).
+    static var transcriptsDir: URL {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Whisper Memory/transcripts")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func outputURL(forSource source: String, ext: String) -> URL {
+        let base = URL(fileURLWithPath: source).deletingPathExtension().lastPathComponent
+        return Self.transcriptsDir.appendingPathComponent("\(base).\(ext)")
     }
 
     /// Load the model in the background (e.g. while recording) so transcription
@@ -63,7 +84,7 @@ final class TranscriptionManager {
         job.status = .success
         job.progress = 100
         job.transcriptText = transcript
-        let outURL = url.deletingPathExtension().appendingPathExtension("txt")
+        let outURL = outputURL(forSource: filePath, ext: "txt")
         try? transcript.write(to: outURL, atomically: true, encoding: .utf8)
         job.outputPath = outURL.path
         modelContext?.insert(job)
@@ -81,6 +102,11 @@ final class TranscriptionManager {
 
     private func run(jobID: UUID, job: TranscriptionJob, filePath: String, language: String?) async {
         do {
+            // First-run model load/download — show "Préparation du modèle…".
+            runs[jobID]?.preparingModel = true
+            await engine.prewarm()
+            runs[jobID]?.preparingModel = false
+
             // Note: don't capture the @Model `job` in this @Sendable closure (data race).
             // Live progress is tracked in `runs[jobID]`; the model is updated on completion.
             let segs = try await engine.transcribe(audioPath: filePath, language: language) { [weak self] frac, text in
@@ -90,28 +116,34 @@ final class TranscriptionManager {
                     if !text.isEmpty { self.runs[jobID]?.liveText = text }
                 }
             }
-            runs[jobID]?.segments = segs
-            runs[jobID]?.progress = 1
-            runs[jobID]?.status = .success
 
-            // Write output in the configured format; keep plain text for Claude.
-            let fmt = OutputFormat(rawValue: settings()?.defaultOutputFormat ?? "txt") ?? .txt
-            let rendered = OutputFormatter.render(segs, as: fmt)
-            let outURL = URL(fileURLWithPath: filePath)
-                .deletingPathExtension().appendingPathExtension(fmt.rawValue)
-            try? rendered.write(to: outURL, atomically: true, encoding: .utf8)
-            job.status = .success
-            job.progress = 100
-            job.outputPath = outURL.path
-            job.outputFormat = fmt.rawValue
-            job.transcriptText = OutputFormatter.render(segs, as: .txt)
-            try? modelContext?.save()
+            if Task.isCancelled {
+                runs[jobID]?.status = .cancelled
+                job.status = .cancelled
+                try? modelContext?.save()
+            } else {
+                runs[jobID]?.segments = segs
+                runs[jobID]?.progress = 1
+                runs[jobID]?.status = .success
 
-            // Auto-enhance if enabled in settings.
-            if let s = settings(), s.claudeEnabled, s.claudeAutoAfterTranscribe {
-                enhance(jobID: jobID)
+                // Write output in the configured format; keep plain text for Claude.
+                let fmt = OutputFormat(rawValue: settings()?.defaultOutputFormat ?? "txt") ?? .txt
+                let rendered = OutputFormatter.render(segs, as: fmt)
+                let outURL = outputURL(forSource: filePath, ext: fmt.rawValue)
+                try? rendered.write(to: outURL, atomically: true, encoding: .utf8)
+                job.status = .success
+                job.progress = 100
+                job.outputPath = outURL.path
+                job.outputFormat = fmt.rawValue
+                job.transcriptText = OutputFormatter.render(segs, as: .txt)
+                try? modelContext?.save()
+
+                if let s = settings(), s.claudeEnabled, s.claudeAutoAfterTranscribe {
+                    enhance(jobID: jobID)
+                }
             }
         } catch {
+            runs[jobID]?.preparingModel = false
             runs[jobID]?.status = .error
             job.status = .error
             job.errorMessage = error.localizedDescription
@@ -125,6 +157,11 @@ final class TranscriptionManager {
 
     func enhance(jobID: UUID) {
         guard let job = fetchJob(jobID), !job.transcriptText.isEmpty else { return }
+        guard EnhancementService.isAvailable else {
+            enhancements[jobID] = EnhancementState(running: false,
+                error: "CLI « claude » introuvable — installez @anthropic-ai/claude-code et connectez-vous.")
+            return
+        }
         let text = job.transcriptText
         let source = job.sourcePath
         let s = settings()
@@ -134,8 +171,7 @@ final class TranscriptionManager {
         Task {
             do {
                 let result = try await enhancer.enhance(text, prompt: prompt, model: model)
-                let url = URL(fileURLWithPath: source)
-                    .deletingPathExtension().appendingPathExtension("summary.md")
+                let url = outputURL(forSource: source, ext: "summary.md")
                 try? result.write(to: url, atomically: true, encoding: .utf8)
                 enhancements[jobID] = EnhancementState(running: false, text: result)
                 job.summaryPath = url.path

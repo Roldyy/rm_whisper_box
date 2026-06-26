@@ -21,19 +21,27 @@ struct EnhancementService {
         return dir
     }
 
+    private static let candidatePaths = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+                                         "\(NSHomeDirectory())/.npm-global/bin/claude"]
+
     /// Locate the `claude` binary across common install dirs (Homebrew, npm).
-    private static func claudeBinary() -> String {
-        let candidates = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude",
-                          "\(NSHomeDirectory())/.npm-global/bin/claude"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "claude"
+    private static func claudeBinary() -> String? {
+        candidatePaths.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
+
+    /// Whether the `claude` CLI is installed (for the Settings indicator + a clear error).
+    static var isAvailable: Bool { claudeBinary() != nil }
 
     /// Run `claude -p` with `prompt` followed by the transcript. Returns stdout.
     func enhance(_ text: String, prompt: String, model: String) async throws -> String {
+        guard let bin = Self.claudeBinary() else {
+            throw NSError(domain: "Enhancement", code: 127, userInfo: [NSLocalizedDescriptionKey:
+                "CLI « claude » introuvable — installez @anthropic-ai/claude-code et connectez-vous."])
+        }
         let fullPrompt = prompt + "\n\nTranscription :\n" + text
 
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: Self.claudeBinary())
+        proc.executableURL = URL(fileURLWithPath: bin)
         proc.arguments = ["-p", "--model", model]
 
         // Run `claude` in a neutral, app-owned directory. Otherwise it inspects

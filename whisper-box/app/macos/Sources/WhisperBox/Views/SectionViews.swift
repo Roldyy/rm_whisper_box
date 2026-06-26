@@ -77,11 +77,17 @@ struct TranscribeView: View {
                         Text(statusText(run)).font(.system(size: 14, weight: .medium))
                     }
                     Spacer()
-                    Text("\(Int(run.progress * 100)) %")
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Theme.accentText)
+                    if !run.preparingModel {
+                        Text("\(Int(run.progress * 100)) %")
+                            .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Theme.accentText)
+                    }
                 }
-                ProgressView(value: run.progress).tint(Theme.accent)
+                if run.preparingModel {
+                    ProgressView().progressViewStyle(.linear).tint(Theme.accent)
+                } else {
+                    ProgressView(value: run.progress).tint(Theme.accent)
+                }
                 HStack {
                     Text("\(run.segments.count) segments · large-v3-turbo")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
@@ -142,6 +148,7 @@ struct TranscribeView: View {
     }
 
     private func statusText(_ r: TranscriptionManager.RunState) -> String {
+        if r.preparingModel { return "Préparation du modèle… (1er lancement)" }
         switch r.status {
         case .running:   return "Transcription en cours…"
         case .success:   return "Terminé — \(r.segments.count) segments"
@@ -630,6 +637,16 @@ struct SettingsView: View {
                         }
                     }
                     divider
+                    row("Langue") {
+                        Picker("", selection: $s.defaultLanguage) {
+                            Text("Détection auto").tag("")
+                            Text("Français").tag("fr")
+                            Text("English").tag("en")
+                            Text("Español").tag("es")
+                            Text("Deutsch").tag("de")
+                        }.labelsHidden().frame(width: 160)
+                    }
+                    divider
                     row("Format de sortie") {
                         Picker("", selection: $s.defaultOutputFormat) {
                             Text("Texte").tag("txt"); Text("SRT").tag("srt"); Text("VTT").tag("vtt")
@@ -669,7 +686,17 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    SectionLabel(text: "Jeton Claude")
+                    HStack {
+                        SectionLabel(text: "Jeton Claude")
+                        Spacer()
+                        if EnhancementService.isAvailable {
+                            Label("CLI claude détecté", systemImage: "checkmark.seal.fill")
+                                .font(.system(size: 11)).foregroundStyle(Theme.green)
+                        } else {
+                            Label("CLI claude introuvable", systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11)).foregroundStyle(Theme.redDim)
+                        }
+                    }
                     Text("Si le CLI claude est déjà connecté, laissez vide. Sinon, collez un token OAuth.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     Card {

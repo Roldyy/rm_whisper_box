@@ -52,7 +52,7 @@ actor WhisperKitEngine: TranscriptionEngine {
             callback: { progress in
                 let frac = min(Double(progress.windowId + 1) / totalWindows, 0.99)
                 onProgress(frac, progress.text)
-                return true
+                return !Task.isCancelled   // stop decoding when the job is cancelled
             }
         )
 

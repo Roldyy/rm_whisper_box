@@ -7,7 +7,7 @@ struct WhisperBoxApp: App {
     /// SwiftData container for jobs / logs / settings (local store in Application Support).
     let container: ModelContainer = {
         do {
-            return try ModelContainer(for: TranscriptionJob.self, ExecutionLog.self, AppSettings.self)
+            return try ModelContainer(for: TranscriptionJob.self, AppSettings.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -30,6 +30,21 @@ struct WhisperBoxApp: App {
         }
         .modelContainer(container)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button(recorder.state == .recording || recorder.state == .paused
+                       ? "Arrêter l'enregistrement" : "Démarrer l'enregistrement") {
+                    Task {
+                        if recorder.state == .recording || recorder.state == .paused {
+                            await recorder.stopAndTranscribe()
+                        } else {
+                            try? await recorder.start(captureSystem: true, captureMic: true)
+                        }
+                    }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
+        }
 
         // Menu-bar presence (replaces the Python rumps launcher).
         MenuBarExtra {

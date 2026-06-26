@@ -75,7 +75,7 @@ final class RecordingService {
         }
 
         if liveEnabled {
-            live.start(language: nil)
+            live.start(language: transcriptionManager?.transcriptionLanguage())
             mixer.onFlush = { [weak self] slice in
                 Task { @MainActor in self?.live.ingest(slice) }
             }
