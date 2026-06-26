@@ -1,7 +1,7 @@
 # WhisperBox (native macOS) — Implementation Audit
 
-Snapshot of the Swift app: **~2,360 LOC across 17 files, cleanly layered, building green.**
-Purpose: identify next steps.
+Snapshot of the Swift app: **cleanly layered, building green.** Purpose: track health
+and next steps. _Last updated: 2026-06-26 — quick-wins batch (#1–#6, #8, #13) landed._
 
 ## Résumé — what's built
 - **Architecture:** app-scoped `@Observable` services (`TranscriptionManager`, `RecordingService`)
@@ -12,50 +12,46 @@ Purpose: identify next steps.
   prompt); History (sections + detail sheet + export + re-transcribe); Logs; Settings;
   sleep resilience (power assertion + graceful finalize); custom dark UI matching the
   mockups; app icon; signed `.dmg` path (`build-dmg.sh`).
-- **Portable in concept:** engine, chunker, formatters, job model — clean for any future
+- **Portable in concept:** engine, formatters, job model — clean for any future
   cross-platform move (whisper.cpp core).
 
-## Findings (prioritized)
+## Findings
 
-### 🔴 Correctness / UX
-1. **First-run model download shows no real feedback** — `WhisperKit(config)` downloads the
-   model on first use; UI sits at "Transcription… 0%". Should show "Préparation du modèle…"
-   + download progress (WhisperKit exposes init progress).
-2. **⌘R is unwired** — the Record screen hints "appuyez sur ⌘R" but no `keyboardShortcut`
-   exists. Wire it or drop the hint.
-3. **Cancel doesn't stop WhisperKit mid-job** — `manager.cancel()` cancels the Task, but
-   `pipe.transcribe` runs to completion (callback always returns `true`). Honor cancellation
-   via the transcribe callback.
-4. **Language is always auto-detect (`nil`)** — per-30s-chunk auto-detect can flip language
-   on the live path. `AppSettings.defaultLanguage` exists but isn't wired; add a picker.
+### 🔴 Correctness / UX — ✅ resolved
+1. ✅ **Model-download feedback** — first run shows "Préparation du modèle…" + indeterminate
+   bar (`prewarm()` before transcribe + `preparingModel` flag).
+2. ✅ **⌘R** — real app command + keyboard shortcut (toggles record/stop app-wide).
+3. ✅ **Cancellation** — WhisperKit callback returns `!Task.isCancelled`; `run()` marks the
+   job cancelled rather than success.
+4. ✅ **Language setting** — Settings "Langue" picker, wired into file + live transcription.
 
-### 🟡 Tech debt / dead code
-5. **`ChunkedTranscriber` + `ChunkPlanner` unused** — live uses `LiveTranscriber`, batch uses
-   WhisperKit's internal chunking. Remove or repurpose for transcription pause/checkpoint.
-6. **`ExecutionLog` model never written** — `LogsView` shows jobs, not logs. Remove or use.
-7. **Unused `AppSettings` fields** — `defaultModel`, `defaultOutputDir` not wired (model
-   hardcoded in two places; output written next to source).
-8. **Output files land next to the source** rather than a dedicated transcripts folder —
-   can clutter user folders / hit read-only locations.
+### 🟡 Tech debt — ✅ mostly resolved
+5. ✅ **`ChunkedTranscriber` / `ChunkPlanner` removed** (were unused).
+6. ✅ **`ExecutionLog` removed** (model was never written).
+7. ⚠️ **Partially:** `defaultLanguage` now wired; `defaultModel` is still hardcoded
+   (`large-v3-turbo`, intentional — model is locked in the UI) and `defaultOutputDir`
+   is unused (output now goes to a fixed transcripts dir, see #8).
+8. ✅ **Output location** — transcripts/summaries now write to `~/Whisper Memory/transcripts/`.
 
-### 🟢 Deferred features / polish
+### 🟢 Deferred features / polish — open
 9.  History **search field** (in mockup, not built).
 10. **Audio duration** never computed/shown (`durationAudio` unpopulated).
-11. **Menu-bar red glyph** while recording (currently shows elapsed time).
+11. **Menu-bar red glyph** while recording (currently shows elapsed time; needs a custom
+    non-template image).
 12. **Transcription sleep-checkpoint** (plan §10.3 Path A) — forced sleep mid-transcription
-    still interrupts it.
-13. **`claude` CLI presence** not checked — enhancement just errors if missing.
+    still interrupts it (recording is handled).
+13. ✅ **`claude` CLI presence** — Settings shows detected/introuvable; enhancement fails
+    fast with a clear message if missing.
 
-### 🔵 Infra
-14. **No tests** — pure-logic services (`OutputFormatter`, `ChunkPlanner`) are trivially
-    unit-testable; add an XCTest target.
+### 🔵 Infra — open
+14. **No tests** — pure-logic services (`OutputFormatter`) are trivially unit-testable;
+    add an XCTest target.
 15. **Swift 5 language mode** — Swift 6 strict concurrency would surface a few `@Sendable`
     issues (currently fine).
 16. **Notarization** (Tier 2) for distribution beyond a few beta testers.
 
-## Recommended next steps
-1. **Quick wins:** model-download feedback (#1), ⌘R (#2), real cancellation (#3),
-   delete dead code (#5, #6).
-2. **Then:** language setting (#4), output-to-transcripts-dir (#8), `claude` CLI check (#13).
-3. **Then features:** History search (#9), audio duration (#10).
-4. **Before shipping wide:** small test target (#14) + notarization (#16).
+## Remaining next steps
+- Polish: History search (#9), audio duration (#10), menu-bar red glyph (#11).
+- Robustness: transcription sleep-checkpoint (#12), test target (#14).
+- Distribution: notarization (#16) when going beyond beta testers.
+- Tidy: drop the unused `defaultModel`/`defaultOutputDir` settings (#7).
