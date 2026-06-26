@@ -25,10 +25,7 @@ export default function RecordPage() {
     word_timestamps: false,
     initial_prompt: '',
     temperature: 0.0,
-    beam_size: 5,
-    best_of: 5,
     condition_on_previous_text: true,
-    fp16: true,
     compression_ratio_threshold: 2.4,
     no_speech_threshold: 0.6,
   })
@@ -51,10 +48,7 @@ export default function RecordPage() {
       word_timestamps: form.word_timestamps,
       initial_prompt: form.initial_prompt || null,
       temperature: form.temperature,
-      beam_size: form.beam_size,
-      best_of: form.best_of,
       condition_on_previous_text: form.condition_on_previous_text,
-      fp16: form.fp16,
       compression_ratio_threshold: form.compression_ratio_threshold,
       no_speech_threshold: form.no_speech_threshold,
     })

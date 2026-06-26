@@ -12,10 +12,7 @@ export interface StartRecordingRequest {
   word_timestamps?: boolean
   initial_prompt?: string | null
   temperature?: number
-  beam_size?: number
-  best_of?: number
   condition_on_previous_text?: boolean
-  fp16?: boolean
   compression_ratio_threshold?: number
   no_speech_threshold?: number
 }

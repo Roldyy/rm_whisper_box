@@ -33,10 +33,7 @@ class StartRecordingRequest(BaseModel):
     word_timestamps: bool = False
     initial_prompt: str | None = None
     temperature: float = 0.0
-    beam_size: int = 5
-    best_of: int = 5
     condition_on_previous_text: bool = True
-    fp16: bool = True
     compression_ratio_threshold: float = 2.4
     no_speech_threshold: float = 0.6
 
@@ -93,9 +90,6 @@ async def stop_recording(db: AsyncSession = Depends(get_db)):
         word_timestamps=1 if settings.get("word_timestamps") else 0,
         initial_prompt=settings.get("initial_prompt"),
         condition_on_previous_text=1 if settings.get("condition_on_previous_text", True) else 0,
-        fp16=1 if settings.get("fp16", True) else 0,
-        beam_size=settings.get("beam_size", 5),
-        best_of=settings.get("best_of", 5),
         compression_ratio_threshold=settings.get("compression_ratio_threshold", 2.4),
         no_speech_threshold=settings.get("no_speech_threshold", 0.6),
     )

@@ -145,7 +145,7 @@ export default function HistoryTable({ jobs }: HistoryTableProps) {
                   </td>
                   <td
                     className="py-2.5 pr-4 text-gray-400"
-                    title={`task: ${job.task ?? 'transcribe'} | temp: ${job.temperature ?? 0} | beam: ${job.beam_size ?? 5} | timestamps: ${job.word_timestamps ? 'oui' : 'non'}`}
+                    title={`task: ${job.task ?? 'transcribe'} | temp: ${job.temperature ?? 0} | timestamps: ${job.word_timestamps ? 'oui' : 'non'}`}
                   >
                     {job.model}
                   </td>

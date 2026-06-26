@@ -426,7 +426,14 @@ async def run_job(job_id: int, db_session, ws_manager):
             "task": job.task or "transcribe",
             "word_timestamps": bool(job.word_timestamps),
             "condition_on_previous_text": bool(job.condition_on_previous_text),
-            "temperature": job.temperature if job.temperature else 0.0,
+            # Temperature fallback ("auto-adjust"): when the user leaves the default
+            # (0.0), pass Whisper's standard fallback schedule so a segment that fails
+            # the compression-ratio / logprob guards is retried at a higher temperature.
+            # This is what lets the decoder escape repetition/hallucination loops — the
+            # cause of the intermittent >realtime slowdown on long, noisy recordings.
+            # A single scalar 0.0 (the old value) disabled fallback entirely.
+            # If the user explicitly sets a non-zero temperature, honor it verbatim.
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0) if not job.temperature else job.temperature,
             "compression_ratio_threshold": job.compression_ratio_threshold or 2.4,
             "no_speech_threshold": job.no_speech_threshold or 0.6,
         }

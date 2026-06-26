@@ -41,10 +41,7 @@ export interface FormValues {
   // Advanced options
   initial_prompt: string
   temperature: number
-  beam_size: number
-  best_of: number
   condition_on_previous_text: boolean
-  fp16: boolean
   compression_ratio_threshold: number
   no_speech_threshold: number
 }
@@ -326,39 +323,7 @@ export default function TranscribeForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              {/* Beam size */}
-              <div>
-                <label className={labelCls}>
-                  Faisceau (beam) — plus grand = plus précis, plus lent
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={values.beam_size}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    onChange('beam_size', parseInt(e.target.value, 10))
-                  }
-                  className={inputCls}
-                />
-              </div>
-
-              {/* Best of */}
-              <div>
-                <label className={labelCls}>Candidats (actif si température &gt; 0)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={values.best_of}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    onChange('best_of', parseInt(e.target.value, 10))
-                  }
-                  className={inputCls}
-                />
-              </div>
-
+            <div className="grid grid-cols-1 gap-4">
               {/* Compression ratio threshold */}
               <div>
                 <label className={labelCls}>Seuil compression</label>
@@ -382,12 +347,6 @@ export default function TranscribeForm({
                 checked={values.condition_on_previous_text}
                 onChange={(v) => onChange('condition_on_previous_text', v)}
                 label="Utiliser le contexte précédent"
-              />
-              <ToggleSwitch
-                id="fp16"
-                checked={values.fp16}
-                onChange={(v) => onChange('fp16', v)}
-                label="Précision FP16 (plus rapide)"
               />
             </div>
           </div>

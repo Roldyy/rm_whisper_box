@@ -22,9 +22,6 @@ export interface TranscriptionJob {
   word_timestamps: number
   initial_prompt: string | null
   condition_on_previous_text: number
-  fp16: number
-  beam_size: number
-  best_of: number
   temperature: number
   compression_ratio_threshold: number
   no_speech_threshold: number
@@ -81,9 +78,6 @@ export interface TranscribeRequest {
   word_timestamps?: boolean
   initial_prompt?: string | null
   condition_on_previous_text?: boolean
-  fp16?: boolean
-  beam_size?: number
-  best_of?: number
   compression_ratio_threshold?: number
   no_speech_threshold?: number
 }
