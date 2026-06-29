@@ -24,7 +24,7 @@ struct RootView: View {
         }
     }
 
-    @State private var selection: Section = .transcribe
+    @State private var selection: Section = .record
     @Environment(TranscriptionManager.self) private var manager
     @Environment(RecordingService.self) private var recorder
     @Environment(\.modelContext) private var context
