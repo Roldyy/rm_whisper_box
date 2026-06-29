@@ -7,11 +7,11 @@ import SwiftData
 /// lights sit in the sidebar's top-left corner (kept clear).
 struct RootView: View {
     enum Section: String, CaseIterable, Identifiable {
-        case record = "Enregistrer"
-        case transcribe = "Transcrire"
-        case history = "Historique"
-        case logs = "Journaux"
-        case settings = "Réglages"
+        case record = "Record"
+        case transcribe = "Transcribe"
+        case history = "History"
+        case logs = "Logs"
+        case settings = "Settings"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -94,7 +94,7 @@ struct RootView: View {
                 Text(timeString(recorder.elapsed))
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Theme.red)
-                Text("en cours d'enregistrement").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                Text("recording").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
             }
             Spacer()
         }
@@ -121,7 +121,7 @@ struct RootView: View {
         if recorder.state == .recording || recorder.state == .paused {
             HStack(spacing: 7) {
                 Circle().fill(Theme.red).frame(width: 7, height: 7)
-                Text("Enregistrement").font(.system(size: 12, weight: .semibold))
+                Text("Recording").font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(Theme.red)
             .padding(.horizontal, 11).padding(.vertical, 4)
@@ -129,7 +129,7 @@ struct RootView: View {
         } else if selection == .record {
             HStack(spacing: 7) {
                 Circle().fill(Theme.textSecondary).frame(width: 7, height: 7)
-                Text("Inactif").font(.system(size: 12.5))
+                Text("Idle").font(.system(size: 12.5))
             }
             .foregroundStyle(Theme.textSecondary)
         }
@@ -168,21 +168,21 @@ struct MenuBarView: View {
             Text("WhisperBox").font(.headline)
             switch recorder.state {
             case .recording:
-                Text("🔴 Enregistrement · \(timeString(recorder.elapsed))").font(.callout)
+                Text("🔴 Recording · \(timeString(recorder.elapsed))").font(.callout)
                 Button("Pause") { recorder.pause() }
-                Button("Arrêter") { Task { await recorder.stopAndTranscribe() } }
+                Button("Stop") { Task { await recorder.stopAndTranscribe() } }
             case .paused:
-                Text("⏸︎ En pause · \(timeString(recorder.elapsed))").font(.callout)
-                Button("Reprendre") { recorder.resume() }
-                Button("Arrêter") { Task { await recorder.stopAndTranscribe() } }
+                Text("⏸︎ Paused · \(timeString(recorder.elapsed))").font(.callout)
+                Button("Resume") { recorder.resume() }
+                Button("Stop") { Task { await recorder.stopAndTranscribe() } }
             default:
-                Button("Démarrer l'enregistrement") { Task { try? await recorder.start(captureSystem: true, captureMic: true) } }
+                Button("Start Recording") { Task { try? await recorder.start(captureSystem: true, captureMic: true) } }
             }
             if running > 0 {
-                Text("\(running) transcription(s) en cours").foregroundStyle(.secondary).font(.caption)
+                Text("\(running) transcription(s) in progress").foregroundStyle(.secondary).font(.caption)
             }
             Divider()
-            Button("Quitter") { NSApplication.shared.terminate(nil) }
+            Button("Quit") { NSApplication.shared.terminate(nil) }
         }
         .padding(8)
         .frame(width: 240)

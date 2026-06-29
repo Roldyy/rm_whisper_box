@@ -40,7 +40,7 @@ targets:
         SWIFT_VERSION: "5.0"            # Swift 5 language mode (lenient concurrency)
         GENERATE_INFOPLIST_FILE: YES
         # Mic needs a usage string; screen recording is requested at runtime (no key).
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "WhisperBox enregistre le microphone pour la transcription."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "WhisperBox records the microphone for transcription."
         INFOPLIST_KEY_LSUIElement: NO
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 66UL8CW95D

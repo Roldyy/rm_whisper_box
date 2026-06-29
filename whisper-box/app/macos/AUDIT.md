@@ -1,9 +1,10 @@
 # WhisperBox (native macOS) — Implementation Audit
 
 Snapshot of the Swift app: **cleanly layered, building green.** Purpose: track health
-and next steps. _Last updated: 2026-06-26 — logging layer (#18) landed; live transcriber
-reworked (rolling buffer + VAD + confirmed/unconfirmed, ported from WhisperKit's
-AudioStreamTranscriber)._
+and next steps. _Last updated: 2026-06-29 — logging (#18), configurable output dirs (#17),
+native window controls (#20), and English UI (#21) landed; live transcriber reworked
+(rolling buffer + VAD + confirmed/unconfirmed, ported from WhisperKit's AudioStreamTranscriber);
+redundant Claude auto-summarize toggle merged into one._
 
 ## Résumé — what's built
 - **Architecture:** app-scoped `@Observable` services (`TranscriptionManager`, `RecordingService`)
@@ -11,7 +12,7 @@ AudioStreamTranscriber)._
   clean Services / Views / Models / Theme split.
 - **Features:** file transcription with live progress; in-process recording (system + mic,
   system audio optional, pause/resume); live transcript; Claude enhancement (editable
-  prompt); History (sections + detail sheet + export + re-transcribe); Logs; Settings;
+  prompt); History (sections + full-page detail + export + re-transcribe); Logs; Settings;
   sleep resilience (power assertion + graceful finalize); custom dark UI matching the
   mockups; app icon; signed `.dmg` path (`build-dmg.sh`).
 - **Portable in concept:** engine, formatters, job model — clean for any future
@@ -37,7 +38,8 @@ AudioStreamTranscriber)._
 
 ### 🟢 Deferred features / polish — open
 9.  History **search field** (in mockup, not built).
-10. **Audio duration** never computed/shown (`durationAudio` unpopulated).
+10. ✅ **Audio duration** — `durationAudio` is set on completion (from the last segment's
+    end time) and shown in the History detail header. Older jobs stay blank.
 11. **Menu-bar red glyph** while recording (currently shows elapsed time; needs a custom
     non-template image).
 12. **Transcription sleep-checkpoint** (plan §10.3 Path A) — forced sleep mid-transcription
@@ -51,11 +53,11 @@ AudioStreamTranscriber)._
 15. **Swift 5 language mode** — Swift 6 strict concurrency would surface a few `@Sendable`
     issues (currently fine).
 16. **Notarization** (Tier 2) for distribution beyond a few beta testers.
-17. **Configurable output directories** — output is currently hardcoded to
-    `~/Whisper Memory/transcripts/` (and the recordings dir). Let the user choose where
-    transcripts / summaries / recordings are written. This is what `defaultOutputDir`
-    (#7) was meant for — wire it up (folder picker in Settings, security-scoped bookmark)
-    instead of dropping it.
+17. ✅ **Configurable output directories** — `AppPaths` (`Services/AppPaths.swift`) resolves
+    transcripts/summaries + recordings from a configurable base, **defaulting to the original
+    `~/Whisper Memory`** when unset. Wired `AppSettings.defaultOutputDir` to a folder picker in
+    Settings (seeded at launch in `RootView.onAppear`, live-updated on pick). Recording
+    detection no longer hardcodes the path (`AppPaths.isRecording(path:)`).
 18. ✅ **Real logging** — `Log` facade over `os.Logger` + persisted `ExecutionLog`
     (`Services/Log.swift`, `Models.swift`): levels info/success/warning/error, optional
     `job` relationship with `.cascade` delete. Rebuilt the "Journaux" tab (filter, detail
@@ -73,27 +75,19 @@ AudioStreamTranscriber)._
     Both **user-configurable** in Settings (defaults TBD, e.g. ⌘⌥R / ⌘⌥P). Carbon
     `RegisterEventHotKey` needs no extra entitlements (app is unsandboxed); or use a small
     lib (e.g. `KeyboardShortcuts`) for storage + a recorder field. Complements the MenuBarExtra.
-20. **Native window controls for the chrome** — `.windowStyle(.hiddenTitleBar)`
-    (`WhisperBoxApp.swift:32`) + the custom 52px top bar (`RootView.swift:103–112`) cover the
-    title-bar region, so the window can't be dragged, double-clicked to zoom, or comfortably
-    resized. **Chosen direction: minimal fix** — keep the custom dark `Theme`, make the top
-    bar a draggable title-bar region (e.g. `WindowDragGesture` / transparent native title bar)
-    so move + zoom + resize work again. _Deferred alternative:_ full native
-    `NavigationSplitView` + `.toolbar` — most native, but forces a **light/dark theming**
-    project (`Theme` is dark-only; `.preferredColorScheme(.dark)` hard-forced at
-    `RootView.swift:40`), so not chosen now.
-21. **Switch primary UI language to English** — UI strings are hardcoded **French** across
-    `RootView.swift`, `Views/SectionViews.swift`, `Components.swift`, `WhisperBoxApp.swift`.
-    Either (a) straight replacement → single-language English app, or (b) proper localization
-    (String Catalog `.xcstrings`, English base + French secondary, `LocalizedStringKey`).
-    Decision TBD. Note: UI language is separate from the transcription `defaultLanguage`
-    (`AppSettings`) and the Claude prompt language — don't conflate them.
+20. ✅ **Native window controls for the chrome** — minimal fix landed: kept the custom dark
+    `Theme`, added `WindowConfigurator` (`WindowConfigurator.swift`) that sets
+    `isMovableByWindowBackground` + a transparent full-size-content title bar, so drag-to-move,
+    double-click-to-zoom, and resize work again. _Deferred alternative (not done):_ full native
+    `NavigationSplitView` + `.toolbar`, which would force a light/dark theming project.
+21. ✅ **English UI** — all user-facing strings translated French → English (straight
+    replacement, option a) across views, services, log/error messages, and the Info.plist mic
+    usage string in `project.yml`. UI language remains separate from the transcription
+    `defaultLanguage` and the Claude prompt.
 
 ## Remaining next steps
-- Polish: History search (#9), audio duration (#10), menu-bar red glyph (#11).
-- Feature: configurable output directories (#17) — wire up `defaultOutputDir` (#7).
-- UX: global recording shortcuts (#19), native window controls — minimal fix (#20),
-  English UI (#21).
+- Polish: History search (#9), menu-bar red glyph (#11).
+- UX: global recording shortcuts (#19) — still open.
 - Robustness: transcription sleep-checkpoint (#12), test target (#14).
 - Distribution: notarization (#16) when going beyond beta testers.
 - Tidy: drop the unused `defaultModel` setting (#7).

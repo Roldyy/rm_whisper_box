@@ -18,7 +18,7 @@ struct TranscribeView: View {
 
     private var fileName: String { filePath.isEmpty ? "" : URL(fileURLWithPath: filePath).lastPathComponent }
     private var fileMeta: String {
-        guard !filePath.isEmpty else { return "Choisissez un fichier audio ou vidéo" }
+        guard !filePath.isEmpty else { return "Choose an audio or video file" }
         let size = (try? FileManager.default.attributesOfItem(atPath: filePath)[.size] as? Int)
             .flatMap { $0 }.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) }
         return [size, filePath].compactMap { $0 }.joined(separator: " · ")
@@ -28,8 +28,8 @@ struct TranscribeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Transcrire un fichier").font(.system(size: 22, weight: .bold))
-                    Text("La transcription continue même si vous changez d'onglet — suivez la progression dans l'Historique.")
+                    Text("Transcribe a file").font(.system(size: 22, weight: .bold))
+                    Text("Transcription continues even if you switch tabs — track progress in History.")
                         .font(.system(size: 13.5)).foregroundStyle(Theme.textSecondary)
                 }
                 fileCard
@@ -55,13 +55,13 @@ struct TranscribeView: View {
                 RoundedRectangle(cornerRadius: 9).fill(Theme.accent.opacity(0.14)).frame(width: 42, height: 42)
                     .overlay(Image(systemName: "doc.text").foregroundStyle(Theme.accentText))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(fileName.isEmpty ? "Aucun fichier" : fileName).font(.system(size: 14.5, weight: .semibold))
+                    Text(fileName.isEmpty ? "No file" : fileName).font(.system(size: 14.5, weight: .semibold))
                     Text(fileMeta).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
-                Button("Parcourir…") { showImporter = true }.buttonStyle(SecondaryButton())
-                Button("Transcrire") { activeJobID = manager.start(filePath: filePath) }
+                Button("Browse…") { showImporter = true }.buttonStyle(SecondaryButton())
+                Button("Transcribe") { activeJobID = manager.start(filePath: filePath) }
                     .buttonStyle(PrimaryButton())
                     .disabled(filePath.isEmpty || run?.status == .running)
             }
@@ -93,7 +93,7 @@ struct TranscribeView: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     Spacer()
                     if run.status == .running, let jid = activeJobID {
-                        Button("Annuler") { manager.cancel(jid) }.buttonStyle(DestructiveButton())
+                        Button("Cancel") { manager.cancel(jid) }.buttonStyle(DestructiveButton())
                     }
                 }
             }
@@ -104,7 +104,7 @@ struct TranscribeView: View {
         HStack(alignment: .top, spacing: 18) {
             VStack(spacing: 0) {
                 HStack {
-                    Text("Aperçu en direct").font(.system(size: 13, weight: .semibold))
+                    Text("Live preview").font(.system(size: 13, weight: .semibold))
                     Spacer()
                 }
                 .padding(.horizontal, 15).padding(.vertical, 11)
@@ -129,7 +129,7 @@ struct TranscribeView: View {
     private func enhancementSection(_ jid: UUID) -> some View {
         let e = manager.enhancements[jid]
         HStack {
-            Button { manager.enhance(jobID: jid) } label: { Label("Résumé Claude", systemImage: "sparkles") }
+            Button { manager.enhance(jobID: jid) } label: { Label("Claude Summary", systemImage: "sparkles") }
                 .buttonStyle(PrimaryButton())
                 .disabled(e?.running == true)
             if e?.running == true { ProgressView().controlSize(.small) }
@@ -148,12 +148,12 @@ struct TranscribeView: View {
     }
 
     private func statusText(_ r: TranscriptionManager.RunState) -> String {
-        if r.preparingModel { return "Préparation du modèle… (1er lancement)" }
+        if r.preparingModel { return "Preparing model… (first launch)" }
         switch r.status {
-        case .running:   return "Transcription en cours…"
-        case .success:   return "Terminé — \(r.segments.count) segments"
-        case .error:     return "Erreur"
-        case .cancelled: return "Annulé"
+        case .running:   return "Transcribing…"
+        case .success:   return "Done — \(r.segments.count) segments"
+        case .error:     return "Error"
+        case .cancelled: return "Cancelled"
         default:         return ""
         }
     }
@@ -180,46 +180,46 @@ struct RecordView: View {
             VStack(spacing: 18) {
                 RecordButton { Task { await start() } }
                 VStack(spacing: 6) {
-                    Text("Prêt à enregistrer").font(.system(size: 21, weight: .semibold))
-                    Text("Capture l'audio du système et du micro — transcription locale")
+                    Text("Ready to record").font(.system(size: 21, weight: .semibold))
+                    Text("Captures system and microphone audio — local transcription")
                         .font(.system(size: 14)).foregroundStyle(Theme.textSecondary)
                 }
             }
 
             Card(padding: 0) {
                 VStack(spacing: 0) {
-                    ToggleRow(title: "Inclure l'audio système",
-                              subtitle: "Capture le son de l'ordinateur (requiert l'autorisation d'enregistrement de l'écran)",
+                    ToggleRow(title: "Include system audio",
+                              subtitle: "Captures the computer's sound (requires screen recording permission)",
                               isOn: $captureSystem)
                     Rectangle().fill(Theme.border).frame(height: 1)
-                    ToggleRow(title: "Inclure le micro",
-                              subtitle: "Enregistre votre voix", isOn: $captureMic)
+                    ToggleRow(title: "Include microphone",
+                              subtitle: "Records your voice", isOn: $captureMic)
                     Rectangle().fill(Theme.border).frame(height: 1)
-                    ToggleRow(title: "Transcription en direct",
-                              subtitle: "Affiche le texte pendant l'enregistrement", isOn: $recorder.liveEnabled)
+                    ToggleRow(title: "Live transcription",
+                              subtitle: "Shows text while recording", isOn: $recorder.liveEnabled)
                 }
             }
             .frame(width: 444)
 
             HStack(spacing: 10) {
-                if captureSystem { Chip(label: "Sortie système", dot: Theme.accent) }
-                if captureMic { Chip(label: "Micro intégré", dot: Theme.accent) }
+                if captureSystem { Chip(label: "System output", dot: Theme.accent) }
+                if captureMic { Chip(label: "Built-in mic", dot: Theme.accent) }
             }
 
             if let err = startError ?? recorder.lastError {
                 Text(err).foregroundStyle(Theme.redDim).font(.system(size: 12.5))
             } else if recorder.state == .endedBySleep {
-                Text("Dernier enregistrement arrêté (veille) — fichier conservé.")
+                Text("Last recording stopped (sleep) — file kept.")
                     .foregroundStyle(Theme.textSecondary).font(.system(size: 12.5))
             } else {
                 HStack(spacing: 8) {
-                    Text("Astuce — appuyez sur")
+                    Text("Tip — press")
                     Text("⌘R").font(.system(size: 11.5, design: .monospaced))
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Theme.control, in: RoundedRectangle(cornerRadius: 5))
                         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                         .foregroundStyle(Color(hex: 0xD6D6DA))
-                    Text("pour démarrer")
+                    Text("to start")
                 }
                 .font(.system(size: 12.5)).foregroundStyle(Theme.textTertiary)
             }
@@ -231,7 +231,7 @@ struct RecordView: View {
     private var activeView: some View {
         VStack(spacing: 0) {
             VStack(spacing: 14) {
-                Text(recorder.state == .paused ? "EN PAUSE" : "ENREGISTREMENT EN COURS")
+                Text(recorder.state == .paused ? "PAUSED" : "RECORDING")
                     .font(.system(size: 11.5, weight: .semibold)).tracking(1.8)
                     .foregroundStyle(Theme.red)
                 Text(timeString(recorder.elapsed))
@@ -243,24 +243,24 @@ struct RecordView: View {
                         Button { recorder.pause() } label: { Label("Pause", systemImage: "pause.fill") }
                             .buttonStyle(SecondaryButton())
                     } else {
-                        Button { recorder.resume() } label: { Label("Reprendre", systemImage: "play.fill") }
+                        Button { recorder.resume() } label: { Label("Resume", systemImage: "play.fill") }
                             .buttonStyle(SecondaryButton())
                     }
                     Button { Task { await recorder.stopAndTranscribe() } } label: {
-                        Label("Arrêter", systemImage: "stop.fill")
+                        Label("Stop", systemImage: "stop.fill")
                     }
                     .buttonStyle(PrimaryButton())
                     .tint(Theme.red)
                 }
                 HStack(spacing: 9) {
-                    if captureMic { Chip(label: "Micro inclus", dot: Theme.green) }
-                    if recorder.liveEnabled { Chip(label: "Transcription en direct", dot: Theme.accent) }
+                    if captureMic { Chip(label: "Mic included", dot: Theme.green) }
+                    if recorder.liveEnabled { Chip(label: "Live transcription", dot: Theme.accent) }
                 }
             }
             .padding(.top, 30)
 
             if recorder.liveEnabled {
-                LivePanel(title: "Transcription en direct", live: recorder.state == .recording,
+                LivePanel(title: "Live transcription", live: recorder.state == .recording,
                           segments: recorder.live.segments,
                           unconfirmedCount: recorder.live.unconfirmedSegments.count)
                     .padding(.top, 22)
@@ -292,18 +292,26 @@ struct HistoryView: View {
     private var done: [TranscriptionJob] { jobs.filter { !isRunning($0) } }
 
     var body: some View {
+        if let selected {
+            JobDetailView(job: selected) { self.selected = nil }
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 if !running.isEmpty {
                     VStack(alignment: .leading, spacing: 11) {
-                        SectionLabel(text: "En cours")
+                        SectionLabel(text: "In progress")
                         ForEach(running) { runningCard($0) }
                     }
                 }
                 VStack(alignment: .leading, spacing: 11) {
-                    SectionLabel(text: "Terminés")
+                    SectionLabel(text: "Completed")
                     if done.isEmpty {
-                        Text("Aucune transcription terminée")
+                        Text("No completed transcriptions")
                             .font(.system(size: 13)).foregroundStyle(Theme.textTertiary)
                     } else {
                         Card(padding: 0) {
@@ -322,10 +330,9 @@ struct HistoryView: View {
         }
         .overlay {
             if jobs.isEmpty {
-                ContentUnavailableView("Aucune transcription", systemImage: "clock.arrow.circlepath")
+                ContentUnavailableView("No transcriptions", systemImage: "clock.arrow.circlepath")
             }
         }
-        .sheet(item: $selected) { JobDetailView(job: $0) }
     }
 
     private func iconBox(_ job: TranscriptionJob, error: Bool = false) -> some View {
@@ -346,12 +353,12 @@ struct HistoryView: View {
                     iconBox(job)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(job.sourceFilename).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                        Text("En cours · \(job.createdAt.formatted(date: .omitted, time: .shortened))")
+                        Text("In progress · \(job.createdAt.formatted(date: .omitted, time: .shortened))")
                             .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     }
                     Spacer()
                     StatusBadge(status: .running)
-                    Button("Annuler") { manager.cancel(job.id) }.buttonStyle(DestructiveButton())
+                    Button("Cancel") { manager.cancel(job.id) }.buttonStyle(DestructiveButton())
                 }
                 HStack(spacing: 12) {
                     ProgressView(value: r?.progress ?? 0).tint(Theme.accent)
@@ -401,18 +408,18 @@ struct HistoryView: View {
 
     @ViewBuilder
     private func menu(_ job: TranscriptionJob) -> some View {
-        Button("Voir le détail") { selected = job }
+        Button("View details") { selected = job }
         if let p = job.outputPath {
-            Button("Ouvrir la transcription") { open(p) }
-            Button("Afficher dans le Finder") { reveal(p) }
+            Button("Open transcription") { open(p) }
+            Button("Show in Finder") { reveal(p) }
         }
-        Button(isFromRecording(job) ? "Ouvrir l'enregistrement" : "Ouvrir l'audio source") {
+        Button(isFromRecording(job) ? "Open recording" : "Open source audio") {
             open(job.sourcePath)
         }
-        if let s = job.summaryPath { Button("Ouvrir le résumé") { open(s) } }
+        if let s = job.summaryPath { Button("Open summary") { open(s) } }
         Divider()
         if job.outputPath != nil || !job.transcriptText.isEmpty {
-            Button("Exporter la transcription…") {
+            Button("Export transcription…") {
                 let base = URL(fileURLWithPath: job.sourcePath).deletingPathExtension().lastPathComponent
                 if let p = job.outputPath {
                     Exporter.saveCopy(of: p, suggestedName: URL(fileURLWithPath: p).lastPathComponent)
@@ -422,14 +429,14 @@ struct HistoryView: View {
             }
         }
         if let s = job.summaryPath {
-            Button("Exporter le résumé…") {
+            Button("Export summary…") {
                 Exporter.saveCopy(of: s, suggestedName: URL(fileURLWithPath: s).lastPathComponent)
             }
         }
-        if !job.transcriptText.isEmpty { Button("Résumé Claude") { manager.enhance(jobID: job.id) } }
-        Button("Re-transcrire (haute qualité)") { manager.start(filePath: job.sourcePath) }
+        if !job.transcriptText.isEmpty { Button("Claude Summary") { manager.enhance(jobID: job.id) } }
+        Button("Re-transcribe (high quality)") { manager.start(filePath: job.sourcePath) }
         Divider()
-        Button("Supprimer", role: .destructive) { context.delete(job); try? context.save() }
+        Button("Delete", role: .destructive) { context.delete(job); try? context.save() }
     }
 
     private func open(_ path: String) { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
@@ -438,11 +445,12 @@ struct HistoryView: View {
     }
 }
 
-/// Detail sheet — read the full transcript + summary, with actions.
+/// Full-page detail — read the full transcript + summary, with actions.
+/// Replaces the History list in place; `onBack` returns to the list.
 struct JobDetailView: View {
     let job: TranscriptionJob
+    let onBack: () -> Void
     @Environment(TranscriptionManager.self) private var manager
-    @Environment(\.dismiss) private var dismiss
 
     private var summaryText: String? {
         if let e = manager.enhancements[job.id], !e.text.isEmpty { return e.text }
@@ -455,38 +463,55 @@ struct JobDetailView: View {
     private var isRecording: Bool { AppPaths.isRecording(path: job.sourcePath) }
     private var base: String { URL(fileURLWithPath: job.sourcePath).deletingPathExtension().lastPathComponent }
 
+    private var durationText: String? {
+        guard let d = job.durationAudio, d > 0 else { return nil }
+        let s = Int(d.rounded())
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+                         : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack(alignment: .top) {
+            // Header — back button + title + meta
+            VStack(alignment: .leading, spacing: 16) {
+                Button(action: onBack) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
+                        Text("History").font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(Theme.accentText)
+                }
+                .buttonStyle(.plain)
+
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(job.sourceFilename).font(.system(size: 17, weight: .bold)).lineLimit(1)
+                    Text(job.sourceFilename).font(.system(size: 20, weight: .bold)).lineLimit(1)
                     HStack(spacing: 9) {
                         Text(job.createdAt.formatted(date: .long, time: .shortened))
                             .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        if let durationText {
+                            Text("·").foregroundStyle(Theme.textTertiary)
+                            Text(durationText).font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                        }
                         if isRecording {
-                            Text("Enregistrement").font(.system(size: 11, weight: .semibold))
+                            Text("Recording").font(.system(size: 11, weight: .semibold))
                                 .padding(.horizontal, 9).padding(.vertical, 2)
                                 .background(Theme.accent.opacity(0.14), in: Capsule()).foregroundStyle(Theme.accentText)
                         }
                         StatusBadge(status: job.status)
                     }
                 }
-                Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)) }
-                    .buttonStyle(.plain).frame(width: 28, height: 28)
-                    .background(Theme.control, in: Circle()).foregroundStyle(Theme.gray)
             }
-            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 18)
 
             // Tabs
             HStack(spacing: 4) {
                 tabButton("Transcription", 0)
-                tabButton("Résumé Claude", 1)
-                tabButton("Journaux", 2)
+                tabButton("Claude Summary", 1)
+                tabButton("Logs", 2)
                 Spacer()
             }
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 34)
             Rectangle().fill(Theme.border).frame(height: 1)
 
             // Body
@@ -495,7 +520,7 @@ struct JobDetailView: View {
                     let sorted = job.logs.sorted { $0.createdAt > $1.createdAt }
                     VStack(spacing: 8) {
                         if sorted.isEmpty {
-                            Text("Aucun journal pour cette tâche.")
+                            Text("No logs for this job.")
                                 .font(.system(size: 13)).foregroundStyle(Theme.textTertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
@@ -505,29 +530,30 @@ struct JobDetailView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 22).padding(.vertical, 16)
+                    .padding(.horizontal, 34).padding(.vertical, 18)
                 } else {
                     Group {
                         if tab == 0 {
-                            Text(job.transcriptText.isEmpty ? "(transcription vide)" : job.transcriptText)
+                            Text(job.transcriptText.isEmpty ? "(empty transcription)" : job.transcriptText)
                                 .textSelection(.enabled)
                         } else if manager.enhancements[job.id]?.running == true {
                             HStack(spacing: 9) {
                                 ProgressView().controlSize(.small)
-                                Text("Génération du résumé…").foregroundStyle(Theme.textSecondary)
+                                Text("Generating summary…").foregroundStyle(Theme.textSecondary)
                             }
                         } else if let err = manager.enhancements[job.id]?.error {
                             Text(err).foregroundStyle(Theme.redDim)
                         } else {
-                            Text(summaryText ?? "Aucun résumé — cliquez sur « Résumé Claude » ci-dessous.")
+                            Text(summaryText ?? "No summary — click \u{201c}Claude Summary\u{201d} below.")
                                 .textSelection(.enabled)
                         }
                     }
                     .font(.system(size: 14)).lineSpacing(3).foregroundStyle(Theme.bodyText)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 22).padding(.vertical, 16)
+                    .padding(.horizontal, 34).padding(.vertical, 18)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(item: $selectedLog) { LogDetailSheet(log: $0) }
 
             // Action bar
@@ -538,27 +564,27 @@ struct JobDetailView: View {
                         if let p = job.outputPath { Exporter.saveCopy(of: p, suggestedName: URL(fileURLWithPath: p).lastPathComponent) }
                         else { Exporter.save(text: job.transcriptText, suggestedName: "\(base).txt") }
                     }
-                    if summaryText != nil { Button("Résumé") { Exporter.save(text: summaryText ?? "", suggestedName: "\(base).summary.md") } }
-                } label: { Label("Exporter", systemImage: "square.and.arrow.down") }
+                    if summaryText != nil { Button("Summary") { Exporter.save(text: summaryText ?? "", suggestedName: "\(base).summary.md") } }
+                } label: { Label("Export", systemImage: "square.and.arrow.down") }
                     .menuStyle(.button).buttonStyle(SecondaryButton()).fixedSize()
 
-                Button("Ouvrir") { if let p = job.outputPath { NSWorkspace.shared.open(URL(fileURLWithPath: p)) } }
+                Button("Open") { if let p = job.outputPath { NSWorkspace.shared.open(URL(fileURLWithPath: p)) } }
                     .buttonStyle(SecondaryButton()).disabled(job.outputPath == nil)
-                Button("Révéler dans le Finder") {
+                Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.outputPath ?? job.sourcePath)])
                 }.buttonStyle(SecondaryButton())
-                Button("Re-transcrire (HQ)") { manager.start(filePath: job.sourcePath); dismiss() }
+                Button("Re-transcribe (HQ)") { manager.start(filePath: job.sourcePath); onBack() }
                     .buttonStyle(SecondaryButton())
                 Spacer()
-                Button { tab = 1; manager.enhance(jobID: job.id) } label: { Label("Résumé Claude", systemImage: "sparkles") }
+                Button { tab = 1; manager.enhance(jobID: job.id) } label: { Label("Claude Summary", systemImage: "sparkles") }
                     .buttonStyle(PrimaryButton())
                     .disabled(manager.enhancements[job.id]?.running == true || job.transcriptText.isEmpty)
             }
-            .padding(.horizontal, 22).padding(.vertical, 13)
-            .background(Theme.window)
+            .padding(.horizontal, 34).padding(.vertical, 13)
+            .background(Theme.bar)
         }
-        .frame(width: 660, height: 560)
-        .background(Theme.sheet)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.window)
     }
 
     private func tabButton(_ title: String, _ index: Int) -> some View {
@@ -671,7 +697,7 @@ struct LogDetailSheet: View {
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if let j = log.job {
-                        Text("Tâche : \(j.sourceFilename)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                        Text("Job: \(j.sourceFilename)").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                     }
                 }
                 .padding(20)
@@ -696,20 +722,20 @@ struct LogsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Menu {
-                    Button("Tous les niveaux") { levelFilter = nil }
+                    Button("All levels") { levelFilter = nil }
                     Divider()
                     ForEach(LogLevel.allCases, id: \.self) { lvl in
                         Button(lvl.rawValue.capitalized) { levelFilter = lvl }
                     }
                 } label: {
-                    Label(levelFilter?.rawValue.capitalized ?? "Tous les niveaux",
+                    Label(levelFilter?.rawValue.capitalized ?? "All levels",
                           systemImage: "line.3.horizontal.decrease.circle")
                 }
                 .menuStyle(.button).buttonStyle(SecondaryButton()).fixedSize()
                 Spacer()
-                Button("Exporter") { Exporter.save(text: exportText(), suggestedName: "whisperbox-journaux.log") }
+                Button("Export") { Exporter.save(text: exportText(), suggestedName: "whisperbox-logs.log") }
                     .buttonStyle(SecondaryButton()).disabled(logs.isEmpty)
-                Button("Vider", role: .destructive) { AppLog.shared.clearAll() }
+                Button("Clear", role: .destructive) { AppLog.shared.clearAll() }
                     .buttonStyle(SecondaryButton()).disabled(logs.isEmpty)
             }
             .padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 12)
@@ -727,7 +753,7 @@ struct LogsView: View {
         }
         .overlay {
             if logs.isEmpty {
-                ContentUnavailableView("Aucun journal", systemImage: "text.alignleft")
+                ContentUnavailableView("No logs", systemImage: "text.alignleft")
             }
         }
         .sheet(item: $selected) { LogDetailSheet(log: $0) }
@@ -764,62 +790,61 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 group("Transcription") {
-                    row("Modèle") {
+                    row("Model") {
                         HStack(spacing: 6) {
                             Text("large-v3-turbo").foregroundStyle(Theme.textSecondary)
                             Image(systemName: "lock.fill").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
                         }
                     }
                     divider
-                    row("Langue") {
+                    row("Language") {
                         Picker("", selection: $s.defaultLanguage) {
-                            Text("Détection auto").tag("")
-                            Text("Français").tag("fr")
+                            Text("Auto-detect").tag("")
+                            Text("French").tag("fr")
                             Text("English").tag("en")
-                            Text("Español").tag("es")
-                            Text("Deutsch").tag("de")
+                            Text("Spanish").tag("es")
+                            Text("German").tag("de")
                         }.labelsHidden().frame(width: 160)
                     }
                     divider
-                    row("Format de sortie") {
+                    row("Output format") {
                         Picker("", selection: $s.defaultOutputFormat) {
-                            Text("Texte").tag("txt"); Text("SRT").tag("srt"); Text("VTT").tag("vtt")
+                            Text("Text").tag("txt"); Text("SRT").tag("srt"); Text("VTT").tag("vtt")
                         }.pickerStyle(.segmented).labelsHidden().frame(width: 210)
                     }
                     divider
-                    row("Dossier de sortie") {
+                    row("Output folder") {
                         HStack(spacing: 8) {
                             Text(displayPath(s.defaultOutputDir))
                                 .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
                                 .lineLimit(1).truncationMode(.middle)
                                 .frame(maxWidth: 200, alignment: .trailing)
-                            Button("Choisir…") { chooseOutputDir(s) }.buttonStyle(SecondaryButton())
+                            Button("Choose…") { chooseOutputDir(s) }.buttonStyle(SecondaryButton())
                             if !s.defaultOutputDir.isEmpty {
-                                Button("Réinitialiser") { s.defaultOutputDir = ""; AppPaths.setBase("") }
+                                Button("Reset") { s.defaultOutputDir = ""; AppPaths.setBase("") }
                                     .buttonStyle(SecondaryButton())
                             }
                         }
                     }
                 }
 
-                group("Amélioration Claude") {
-                    toggleRow("Activer l'amélioration Claude",
-                              "Résume automatiquement les transcriptions avec Claude", $s.claudeEnabled)
+                group("Claude Enhancement") {
+                    toggleRow("Auto-summarize after transcription",
+                              "Generate a Claude summary automatically after each transcription",
+                              $s.claudeAutoAfterTranscribe)
                     divider
-                    row("Modèle") {
+                    row("Model") {
                         Picker("", selection: $s.claudeModel) {
                             Text("Opus 4.8").tag("claude-opus-4-8")
                             Text("Sonnet 4.6").tag("claude-sonnet-4-6")
                             Text("Haiku 4.5").tag("claude-haiku-4-5-20251001")
                         }.labelsHidden().frame(width: 160)
                     }
-                    divider
-                    toggleRow("Résumé automatique après transcription", "", $s.claudeAutoAfterTranscribe)
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    SectionLabel(text: "Prompt Claude")
-                    Text("Cette instruction est envoyée à Claude, suivie de la transcription.")
+                    SectionLabel(text: "Claude Prompt")
+                    Text("This instruction is sent to Claude, followed by the transcription.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     Card(background: Theme.panel) {
                         VStack(alignment: .trailing, spacing: 8) {
@@ -827,7 +852,7 @@ struct SettingsView: View {
                                 .font(.system(size: 13, design: .monospaced))
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 120)
-                            Button("Réinitialiser") { s.claudePrompt = EnhancementService.defaultPrompt }
+                            Button("Reset") { s.claudePrompt = EnhancementService.defaultPrompt }
                                 .buttonStyle(SecondaryButton())
                         }
                     }
@@ -835,35 +860,35 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 9) {
                     HStack {
-                        SectionLabel(text: "Jeton Claude")
+                        SectionLabel(text: "Claude Token")
                         Spacer()
                         if EnhancementService.isAvailable {
-                            Label("CLI claude détecté", systemImage: "checkmark.seal.fill")
+                            Label("claude CLI detected", systemImage: "checkmark.seal.fill")
                                 .font(.system(size: 11)).foregroundStyle(Theme.green)
                         } else {
-                            Label("CLI claude introuvable", systemImage: "exclamationmark.triangle.fill")
+                            Label("claude CLI not found", systemImage: "exclamationmark.triangle.fill")
                                 .font(.system(size: 11)).foregroundStyle(Theme.redDim)
                         }
                     }
-                    Text("Si le CLI claude est déjà connecté, laissez vide. Sinon, collez un token OAuth.")
+                    Text("If the claude CLI is already signed in, leave this empty. Otherwise, paste an OAuth token.")
                         .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
                     if !EnhancementService.isAvailable {
-                        Text("1. Installez le CLI :  npm install -g @anthropic-ai/claude-code")
+                        Text("1. Install the CLI:  npm install -g @anthropic-ai/claude-code")
                             .font(.system(size: 11.5, design: .monospaced))
                             .foregroundStyle(Theme.textTertiary).textSelection(.enabled)
                     }
-                    Text("Pour générer un token : lancez «\u{00a0}claude setup-token\u{00a0}» dans le Terminal, puis collez-le ci-dessous. (Ou lancez «\u{00a0}claude\u{00a0}» une fois pour vous connecter — aucun token requis.)")
+                    Text("To generate a token: run \u{201c}\u{00a0}claude setup-token\u{00a0}\u{201d} in Terminal, then paste it below. (Or run \u{201c}\u{00a0}claude\u{00a0}\u{201d} once to sign in — no token required.)")
                         .font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary).textSelection(.enabled)
                     Card {
                         VStack(spacing: 10) {
                             SecureField("CLAUDE_CODE_OAUTH_TOKEN", text: $token).textFieldStyle(.roundedBorder)
                             HStack {
-                                Button("Enregistrer") { if !token.isEmpty { KeychainService.set(token); token = "" } }
+                                Button("Save") { if !token.isEmpty { KeychainService.set(token); token = "" } }
                                     .buttonStyle(SecondaryButton()).disabled(token.isEmpty)
-                                Button("Effacer") { KeychainService.delete() }.buttonStyle(SecondaryButton())
+                                Button("Clear") { KeychainService.delete() }.buttonStyle(SecondaryButton())
                                 Spacer()
                                 if KeychainService.get() != nil {
-                                    Label("token présent", systemImage: "checkmark.seal.fill")
+                                    Label("token present", systemImage: "checkmark.seal.fill")
                                         .font(.system(size: 12)).foregroundStyle(Theme.green)
                                 }
                             }
@@ -877,7 +902,7 @@ struct SettingsView: View {
     }
 
     private func displayPath(_ p: String) -> String {
-        p.isEmpty ? "~/Whisper Memory (défaut)" : (p as NSString).abbreviatingWithTildeInPath
+        p.isEmpty ? "~/Whisper Memory (default)" : (p as NSString).abbreviatingWithTildeInPath
     }
 
     private func chooseOutputDir(_ s: AppSettings) {
@@ -885,7 +910,7 @@ struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Choisir"
+        panel.prompt = "Choose"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         s.defaultOutputDir = url.path
         AppPaths.setBase(url.path)

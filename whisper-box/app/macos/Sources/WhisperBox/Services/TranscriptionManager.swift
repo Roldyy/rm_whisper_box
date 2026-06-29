@@ -44,7 +44,7 @@ final class TranscriptionManager {
 
         let id = job.id
         runs[id] = RunState()
-        power.acquire(reason: "WhisperBox transcrit")
+        power.acquire(reason: "WhisperBox is transcribing")
         let lang = language ?? transcriptionLanguage()
         tasks[id] = Task { [weak self] in
             await self?.run(jobID: id, job: job, filePath: filePath, language: lang)
@@ -84,7 +84,7 @@ final class TranscriptionManager {
         job.outputPath = outURL.path
         modelContext?.insert(job)
         try? modelContext?.save()
-        if let s = settings(), s.claudeEnabled, s.claudeAutoAfterTranscribe { enhance(jobID: job.id) }
+        if let s = settings(), s.claudeAutoAfterTranscribe { enhance(jobID: job.id) }
     }
 
     func cancel(_ id: UUID) {
@@ -97,7 +97,7 @@ final class TranscriptionManager {
 
     private func run(jobID: UUID, job: TranscriptionJob, filePath: String, language: String?) async {
         do {
-            // First-run model load/download — show "Préparation du modèle…".
+            // First-run model load/download — show "Preparing model…".
             runs[jobID]?.preparingModel = true
             await engine.prewarm()
             runs[jobID]?.preparingModel = false
@@ -116,7 +116,7 @@ final class TranscriptionManager {
                 runs[jobID]?.status = .cancelled
                 job.status = .cancelled
                 try? modelContext?.save()
-                Log.transcription.info("Transcription annulée", job: job)
+                Log.transcription.info("Transcription cancelled", job: job)
             } else {
                 runs[jobID]?.segments = segs
                 runs[jobID]?.progress = 1
@@ -132,10 +132,11 @@ final class TranscriptionManager {
                 job.outputPath = outURL.path
                 job.outputFormat = fmt.rawValue
                 job.transcriptText = OutputFormatter.render(segs, as: .txt)
+                if let end = segs.last?.end, end > 0 { job.durationAudio = end }
                 try? modelContext?.save()
-                Log.transcription.success("Transcription terminée", job: job, detail: "\(segs.count) segments")
+                Log.transcription.success("Transcription complete", job: job, detail: "\(segs.count) segments")
 
-                if let s = settings(), s.claudeEnabled, s.claudeAutoAfterTranscribe {
+                if let s = settings(), s.claudeAutoAfterTranscribe {
                     enhance(jobID: jobID)
                 }
             }
@@ -145,7 +146,7 @@ final class TranscriptionManager {
             job.status = .error
             job.errorMessage = error.localizedDescription
             try? modelContext?.save()
-            Log.transcription.error("Échec de la transcription", job: job, detail: error.localizedDescription)
+            Log.transcription.error("Transcription failed", job: job, detail: error.localizedDescription)
         }
         tasks[jobID] = nil
         if !hasRunningJobs { power.release() }
@@ -157,8 +158,8 @@ final class TranscriptionManager {
         guard let job = fetchJob(jobID), !job.transcriptText.isEmpty else { return }
         guard EnhancementService.isAvailable else {
             enhancements[jobID] = EnhancementState(running: false,
-                error: "CLI « claude » introuvable — installez @anthropic-ai/claude-code et connectez-vous.")
-            Log.enhancement.warning("CLI « claude » introuvable", job: job)
+                error: "claude CLI not found — install @anthropic-ai/claude-code and sign in.")
+            Log.enhancement.warning("claude CLI not found", job: job)
             return
         }
         let text = job.transcriptText
@@ -175,10 +176,10 @@ final class TranscriptionManager {
                 enhancements[jobID] = EnhancementState(running: false, text: result)
                 job.summaryPath = url.path
                 try? modelContext?.save()
-                Log.enhancement.success("Résumé Claude généré", job: job)
+                Log.enhancement.success("Claude summary generated", job: job)
             } catch {
                 enhancements[jobID] = EnhancementState(running: false, error: error.localizedDescription)
-                Log.enhancement.error("Échec du résumé Claude", job: job, detail: error.localizedDescription)
+                Log.enhancement.error("Claude summary failed", job: job, detail: error.localizedDescription)
             }
         }
     }

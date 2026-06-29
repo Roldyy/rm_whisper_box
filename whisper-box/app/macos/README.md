@@ -12,9 +12,9 @@ or `app/frontend`.
   WhisperKit's `AudioStreamTranscriber` technique, adapted to the mixed system+mic stream).
 - **Transcribe** dropped/picked files with live streaming progress.
 - **Claude enhancement** (summary) via the `claude` CLI, with an editable prompt.
-- **History** (in-progress + done), detail sheet, export, on-demand high-quality re-transcribe.
+- **History** (in-progress + done), full-page detail, export, on-demand high-quality re-transcribe.
 - **Logs (Journaux)** — a persisted event log (info / success / warning / error) with full
-  detail, level filter, export, and clear; per-job logs surface in the job detail sheet.
+  detail, level filter, export, and clear; per-job logs surface in the job detail page.
   Everything is also emitted to the unified log (`os.Logger`, viewable in Console.app).
 - **Sleep resilience** — prevents idle sleep while busy; finalizes a valid recording on sleep.
 - Dark UI matching the design mockups; custom app icon; signed `.dmg` distribution.
@@ -52,6 +52,7 @@ build-dmg.sh                      # Release build → signed .dmg
 Sources/WhisperBox/
   WhisperBoxApp.swift             # @main App: WindowGroup + MenuBarExtra + ⌘R command
   RootView.swift                  # custom dark shell (sidebar + top bar) + MenuBarView
+  WindowConfigurator.swift        # native window behavior (drag/zoom/resize) under custom chrome
   Theme.swift / Components.swift  # design tokens + reusable UI (from the mockups)
   Models/Models.swift             # SwiftData: TranscriptionJob, AppSettings, ExecutionLog
   Services/
@@ -63,6 +64,7 @@ Sources/WhisperBox/
     TranscriptionManager.swift    # app-scoped job owner (progress, persistence, enhancement)
     EnhancementService.swift      # Claude CLI (subscription billing)
     Log.swift                     # os.Logger facade + persisted ExecutionLog (feeds the Logs tab)
+    AppPaths.swift                # resolves transcripts/recordings dirs (configurable base)
     OutputFormatter.swift         # txt / srt / vtt
     KeychainService.swift         # Security.framework (Claude token)
     PowerAssertion.swift          # IOPMAssertion (prevent idle sleep)
@@ -74,7 +76,9 @@ Sources/WhisperBox/
 - Engine: **WhisperKit** (Core ML / ANE, streaming). Model: `openai_whisper-large-v3-v20240930_turbo`, downloaded first-run.
 - Persistence: **SwiftData** (greenfield; no import of the old `app.db`).
 - Distribution: direct, signed **`.dmg`** (Team `66UL8CW95D`); not Mac App Store, which keeps the Claude CLI / subscription billing.
-- Output: transcripts + summaries written to `~/Whisper Memory/transcripts/`; recordings to `~/Whisper Memory/recordings/`.
+- Output: transcripts + summaries and recordings are written under a configurable base
+  directory (Settings → Output folder), **defaulting to `~/Whisper Memory/`** (`transcripts/`
+  + `recordings/` subfolders).
 
 ## Docs
 - `SWIFT_MIGRATION_PLAN.md` — full migration plan & phases.

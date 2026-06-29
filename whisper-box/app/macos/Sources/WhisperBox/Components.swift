@@ -31,11 +31,11 @@ struct StatusBadge: View {
     let status: JobStatus
     private var label: String {
         switch status {
-        case .running, .pending: return "En cours"
-        case .success:           return "Terminé"
-        case .error:             return "Erreur"
-        case .cancelled:         return "Annulé"
-        case .paused:            return "En pause"
+        case .running, .pending: return "In progress"
+        case .success:           return "Done"
+        case .error:             return "Error"
+        case .cancelled:         return "Cancelled"
+        case .paused:            return "Paused"
         }
     }
     var body: some View {
@@ -48,7 +48,7 @@ struct StatusBadge: View {
     }
 }
 
-/// Pill chip with an optional colored dot ("Sortie système", "Micro inclus").
+/// Pill chip with an optional colored dot ("System output", "Mic included").
 struct Chip: View {
     let label: String
     var dot: Color?
@@ -142,7 +142,7 @@ struct Waveform: View {
 struct LivePanel: View {
     let title: String
     var live: Bool = false
-    var caption: String = "Texte nettoyé · horodaté par segment"
+    var caption: String = "Cleaned text · timestamped per segment"
     let segments: [TranscriptSegment]
     /// Number of trailing segments still being refined (the live hypothesis tail).
     var unconfirmedCount: Int = 0
@@ -155,7 +155,7 @@ struct LivePanel: View {
                     if live {
                         HStack(spacing: 5) {
                             Circle().fill(Theme.green).frame(width: 6, height: 6)
-                            Text("en direct").font(.system(size: 11)).foregroundStyle(Theme.green)
+                            Text("live").font(.system(size: 11)).foregroundStyle(Theme.green)
                         }
                     }
                 }

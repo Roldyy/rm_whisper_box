@@ -33,7 +33,7 @@ struct WhisperBoxApp: App {
         .commands {
             CommandGroup(after: .newItem) {
                 Button(recorder.state == .recording || recorder.state == .paused
-                       ? "Arrêter l'enregistrement" : "Démarrer l'enregistrement") {
+                       ? "Stop Recording" : "Start Recording") {
                     Task {
                         if recorder.state == .recording || recorder.state == .paused {
                             await recorder.stopAndTranscribe()

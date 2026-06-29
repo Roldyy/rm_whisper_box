@@ -6,9 +6,9 @@ import Foundation
 struct EnhancementService {
     /// Default instruction prepended to the transcript (editable in Settings).
     static let defaultPrompt = """
-    Tu es un assistant qui résume des transcriptions audio.
-    Produis un résumé concis (5-10 points clés) de la transcription ci-dessous.
-    Réponds dans la langue de la transcription.
+    You are an assistant that summarizes audio transcriptions.
+    Produce a concise summary (5-10 key points) of the transcription below.
+    Respond in the language of the transcription.
     """
 
     /// Neutral app-owned working dir for the `claude` subprocess (avoids it
@@ -36,9 +36,9 @@ struct EnhancementService {
     func enhance(_ text: String, prompt: String, model: String) async throws -> String {
         guard let bin = Self.claudeBinary() else {
             throw NSError(domain: "Enhancement", code: 127, userInfo: [NSLocalizedDescriptionKey:
-                "CLI « claude » introuvable — installez @anthropic-ai/claude-code et connectez-vous."])
+                "claude CLI not found — install @anthropic-ai/claude-code and sign in."])
         }
-        let fullPrompt = prompt + "\n\nTranscription :\n" + text
+        let fullPrompt = prompt + "\n\nTranscription:\n" + text
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: bin)
@@ -65,7 +65,7 @@ struct EnhancementService {
         proc.waitUntilExit()
         guard proc.terminationStatus == 0 else {
             throw NSError(domain: "Enhancement", code: Int(proc.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey: "claude CLI a échoué (code \(proc.terminationStatus))"])
+                          userInfo: [NSLocalizedDescriptionKey: "claude CLI failed (code \(proc.terminationStatus))"])
         }
         return String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }

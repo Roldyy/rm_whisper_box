@@ -51,8 +51,8 @@ struct MockEngine: TranscriptionEngine {
         onProgress: @escaping ProgressHandler
     ) async throws -> [TranscriptSegment] {
         let segs = [
-            TranscriptSegment(start: 0, end: 2, text: "[mock] WhisperKit non lié."),
-            TranscriptSegment(start: 2, end: 4, text: "[mock] Compilez avec la dépendance pour activer."),
+            TranscriptSegment(start: 0, end: 2, text: "[mock] WhisperKit not linked."),
+            TranscriptSegment(start: 2, end: 4, text: "[mock] Build with the dependency to enable."),
         ]
         var acc = ""
         for (i, s) in segs.enumerated() {

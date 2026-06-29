@@ -52,7 +52,7 @@ final class AppLog {
 }
 
 /// Ergonomic entry point: `Log.recording.error("…", detail: …)`,
-/// `Log.transcription.success("Terminé", job: job)`.
+/// `Log.transcription.success("Done", job: job)`.
 enum Log {
     static let app = Category(operation: "app")
     static let recording = Category(operation: "recording")

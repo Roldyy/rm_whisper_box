@@ -13,7 +13,7 @@ enum LogLevel: String, Codable, CaseIterable {
 }
 
 /// Persisted app event — revives the old backend's `execution_logs`. Feeds the
-/// Logs tab and the per-job "Journaux" view; also mirrored to `os.Logger`.
+/// Logs tab and the per-job "Logs" view; also mirrored to `os.Logger`.
 /// `job` is optional (nil = app-level event) and cascades from `TranscriptionJob`.
 @Model
 final class ExecutionLog {
@@ -94,8 +94,9 @@ final class AppSettings {
     var defaultOutputFormat: String = "txt"
     var defaultOutputDir: String = ""
     // Claude enhancement (port of the CLI-based integration).
-    var claudeEnabled: Bool = false
     var claudeModel: String = "claude-opus-4-8"
+    /// Auto-generate a Claude summary after each transcription (manual summary is
+    /// always available via the job detail, independent of this flag).
     var claudeAutoAfterTranscribe: Bool = false
     /// Instruction prepended to the transcript when enhancing (editable in Settings).
     var claudePrompt: String = EnhancementService.defaultPrompt

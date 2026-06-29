@@ -44,7 +44,7 @@ final class RecordingService {
         guard state == .idle || state == .stopped || state == .endedBySleep else { return }
         guard captureSystem || captureMic else {
             throw NSError(domain: "Recorder", code: 11,
-                          userInfo: [NSLocalizedDescriptionKey: "Sélectionnez au moins une source audio."])
+                          userInfo: [NSLocalizedDescriptionKey: "Select at least one audio source."])
         }
         lastError = nil
 
@@ -57,18 +57,18 @@ final class RecordingService {
         if captureMic {
             let m = MicCapturer(sourceIndex: captureSystem ? 1 : 0)
             do { try m.prepare(); mic = m }
-            catch { Log.recording.warning("Préparation du micro échouée", detail: error.localizedDescription) }
+            catch { Log.recording.warning("Microphone preparation failed", detail: error.localizedDescription) }
         }
         let count = (captureSystem ? 1 : 0) + (mic != nil ? 1 : 0)
         guard count > 0 else {
             throw NSError(domain: "Recorder", code: 12,
-                          userInfo: [NSLocalizedDescriptionKey: "Micro indisponible."])
+                          userInfo: [NSLocalizedDescriptionKey: "Microphone unavailable."])
         }
         let mixer = AudioMixer(writer: writer, sourceCount: count)
         if let m = mic {
             m.mixer = mixer
             do { try m.start() } catch {
-                Log.recording.warning("Démarrage du micro échoué — enregistrement sans micro",
+                Log.recording.warning("Microphone start failed — recording without microphone",
                                       detail: error.localizedDescription)
                 mixer.finish(source: m.sourceIndex); mic = nil
             }
@@ -87,7 +87,7 @@ final class RecordingService {
         if captureSystem {
             let content = try await SCShareableContent.current
             guard let display = content.displays.first else {
-                throw NSError(domain: "Recorder", code: 10, userInfo: [NSLocalizedDescriptionKey: "Aucun écran trouvé"])
+                throw NSError(domain: "Recorder", code: 10, userInfo: [NSLocalizedDescriptionKey: "No screen found"])
             }
             let config = SCStreamConfiguration()
             config.capturesAudio = true
@@ -97,7 +97,7 @@ final class RecordingService {
             let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
             let cap = SystemAudioCapturer(mixer: mixer, sourceIndex: 0)
             cap.onStop = { [weak self] err in
-                Log.recording.error("Flux audio système interrompu", detail: err.localizedDescription)
+                Log.recording.error("System audio stream interrupted", detail: err.localizedDescription)
                 Task { @MainActor in self?.lastError = err.localizedDescription }
             }
             let s = SCStream(filter: filter, configuration: config, delegate: cap)
@@ -110,11 +110,11 @@ final class RecordingService {
         self.micCapturer = mic; self.stream = stream; self.outputURL = url
         startedAt = Date(); pausedAccum = 0; pauseStartedAt = nil
         state = .recording
-        power.acquire(reason: "WhisperBox enregistre")
+        power.acquire(reason: "WhisperBox is recording")
         transcriptionManager?.prewarm()
         startTimer()
-        Log.recording.success("Enregistrement démarré",
-                              detail: "système: \(captureSystem ? "oui" : "non") · micro: \(mic != nil ? "oui" : "non")")
+        Log.recording.success("Recording started",
+                              detail: "system: \(captureSystem ? "yes" : "no") · mic: \(mic != nil ? "yes" : "no")")
     }
 
     func pause() {
@@ -140,7 +140,7 @@ final class RecordingService {
         timer?.invalidate(); timer = nil
         if let stream {
             do { try await stream.stopCapture() }
-            catch { Log.recording.error("Arrêt de la capture système échoué", detail: error.localizedDescription) }
+            catch { Log.recording.error("System capture stop failed", detail: error.localizedDescription) }
         }
         if systemCapturer != nil { mixer?.finish(source: 0) }   // system is source 0 when present
         micCapturer?.stop()                                     // removes tap, then finishes mic's source
@@ -150,7 +150,7 @@ final class RecordingService {
         let url = outputURL
         state = .stopped
         cleanup()
-        if let url { Log.recording.success("Enregistrement enregistré", detail: url.lastPathComponent) }
+        if let url { Log.recording.success("Recording saved", detail: url.lastPathComponent) }
         return url
     }
 
