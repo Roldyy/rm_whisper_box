@@ -59,16 +59,11 @@ final class TranscriptionManager {
     }
 
     /// All transcripts/summaries are written here (not next to the source file).
-    static var transcriptsDir: URL {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Whisper Memory/transcripts")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
+    static var transcriptsDir: URL { AppPaths.transcriptsDir }
 
     private func outputURL(forSource source: String, ext: String) -> URL {
         let base = URL(fileURLWithPath: source).deletingPathExtension().lastPathComponent
-        return Self.transcriptsDir.appendingPathComponent("\(base).\(ext)")
+        return AppPaths.transcriptsDir.appendingPathComponent("\(base).\(ext)")
     }
 
     /// Load the model in the background (e.g. while recording) so transcription

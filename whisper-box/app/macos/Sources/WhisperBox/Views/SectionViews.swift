@@ -396,7 +396,7 @@ struct HistoryView: View {
     }
 
     private func isFromRecording(_ job: TranscriptionJob) -> Bool {
-        job.sourcePath.contains("/Whisper Memory/recordings/")
+        AppPaths.isRecording(path: job.sourcePath)
     }
 
     @ViewBuilder
@@ -452,7 +452,7 @@ struct JobDetailView: View {
 
     @State private var tab = 0
     @State private var selectedLog: ExecutionLog?
-    private var isRecording: Bool { job.sourcePath.contains("/Whisper Memory/recordings/") }
+    private var isRecording: Bool { AppPaths.isRecording(path: job.sourcePath) }
     private var base: String { URL(fileURLWithPath: job.sourcePath).deletingPathExtension().lastPathComponent }
 
     var body: some View {
@@ -786,6 +786,20 @@ struct SettingsView: View {
                             Text("Texte").tag("txt"); Text("SRT").tag("srt"); Text("VTT").tag("vtt")
                         }.pickerStyle(.segmented).labelsHidden().frame(width: 210)
                     }
+                    divider
+                    row("Dossier de sortie") {
+                        HStack(spacing: 8) {
+                            Text(displayPath(s.defaultOutputDir))
+                                .font(.system(size: 12.5)).foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1).truncationMode(.middle)
+                                .frame(maxWidth: 200, alignment: .trailing)
+                            Button("Choisir…") { chooseOutputDir(s) }.buttonStyle(SecondaryButton())
+                            if !s.defaultOutputDir.isEmpty {
+                                Button("Réinitialiser") { s.defaultOutputDir = ""; AppPaths.setBase("") }
+                                    .buttonStyle(SecondaryButton())
+                            }
+                        }
+                    }
                 }
 
                 group("Amélioration Claude") {
@@ -860,6 +874,21 @@ struct SettingsView: View {
             .frame(maxWidth: 640, alignment: .leading)
             .padding(.horizontal, 34).padding(.vertical, 24)
         }
+    }
+
+    private func displayPath(_ p: String) -> String {
+        p.isEmpty ? "~/Whisper Memory (défaut)" : (p as NSString).abbreviatingWithTildeInPath
+    }
+
+    private func chooseOutputDir(_ s: AppSettings) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choisir"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        s.defaultOutputDir = url.path
+        AppPaths.setBase(url.path)
     }
 
     private var divider: some View { Rectangle().fill(Theme.border).frame(height: 1) }

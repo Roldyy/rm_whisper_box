@@ -7,10 +7,15 @@ or `app/frontend`.
 
 ## Features
 - **Record** system audio (ScreenCaptureKit) + mic (AVFoundation), system audio optional,
-  with pause/resume and a live transcript during recording.
+  with pause/resume and a **live streaming transcript** during recording — a rolling-window
+  transcriber with voice-activity detection and confirmed/unconfirmed segments (ported from
+  WhisperKit's `AudioStreamTranscriber` technique, adapted to the mixed system+mic stream).
 - **Transcribe** dropped/picked files with live streaming progress.
 - **Claude enhancement** (summary) via the `claude` CLI, with an editable prompt.
 - **History** (in-progress + done), detail sheet, export, on-demand high-quality re-transcribe.
+- **Logs (Journaux)** — a persisted event log (info / success / warning / error) with full
+  detail, level filter, export, and clear; per-job logs surface in the job detail sheet.
+  Everything is also emitted to the unified log (`os.Logger`, viewable in Console.app).
 - **Sleep resilience** — prevents idle sleep while busy; finalizes a valid recording on sleep.
 - Dark UI matching the design mockups; custom app icon; signed `.dmg` distribution.
 
@@ -48,15 +53,16 @@ Sources/WhisperBox/
   WhisperBoxApp.swift             # @main App: WindowGroup + MenuBarExtra + ⌘R command
   RootView.swift                  # custom dark shell (sidebar + top bar) + MenuBarView
   Theme.swift / Components.swift  # design tokens + reusable UI (from the mockups)
-  Models/Models.swift             # SwiftData: TranscriptionJob, AppSettings
+  Models/Models.swift             # SwiftData: TranscriptionJob, AppSettings, ExecutionLog
   Services/
     TranscriptionEngine.swift     # protocol + factory (shared singleton) + MockEngine
     WhisperKitEngine.swift        # real engine (actor, cached pipeline)
-    LiveTranscriber.swift         # live chunked transcript during recording
+    LiveTranscriber.swift         # rolling-window live transcript (VAD + confirmed/unconfirmed)
     RecordingService.swift        # in-process capture (system+mic), pause/resume, sleep
     RecorderEngine.swift          # WAV writer / mixer / capturers (ported from SCRecorder.swift)
     TranscriptionManager.swift    # app-scoped job owner (progress, persistence, enhancement)
     EnhancementService.swift      # Claude CLI (subscription billing)
+    Log.swift                     # os.Logger facade + persisted ExecutionLog (feeds the Logs tab)
     OutputFormatter.swift         # txt / srt / vtt
     KeychainService.swift         # Security.framework (Claude token)
     PowerAssertion.swift          # IOPMAssertion (prevent idle sleep)

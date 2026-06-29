@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SwiftData
 
 /// Custom shell matching the redesign: dark sidebar with blue-filled selection +
 /// a 52px top bar. Used with `.windowStyle(.hiddenTitleBar)` so the native traffic
@@ -37,6 +38,7 @@ struct RootView: View {
             }
         }
         .background(Theme.window)
+        .background(WindowConfigurator())
         .preferredColorScheme(.dark)
         .frame(minWidth: 940, minHeight: 620)
         .onAppear {
@@ -44,6 +46,9 @@ struct RootView: View {
             recorder.transcriptionManager = manager
             AppLog.shared.modelContext = context
             AppLog.shared.prune()
+            if let s = try? context.fetch(FetchDescriptor<AppSettings>()).first {
+                AppPaths.setBase(s.defaultOutputDir)
+            }
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)) { _ in
             Task { await recorder.handleSystemWillSleep() }

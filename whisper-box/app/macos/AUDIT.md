@@ -63,9 +63,37 @@ AudioStreamTranscriber)._
     prune (14 days / 2000 cap). Key failure + success sites instrumented (recording,
     transcription, enhancement).
 
+### 🟣 UX / feature — open
+19. **Global recording shortcuts (configurable)** — today the record toggle (⌘R) is an
+    in-app command (`WhisperBoxApp.swift:33–46`), so it only fires when the app is focused.
+    Add two **system-wide** hotkeys that work unfocused:
+    - **Start/stop toggle** — one combo that starts when idle and stops when recording/paused
+      (same logic as ⌘R: `recorder.start(captureSystem:captureMic:)` / `stopAndTranscribe()`).
+    - **Pause/resume toggle** — a separate combo toggling `recorder.pause()` / `resume()`.
+    Both **user-configurable** in Settings (defaults TBD, e.g. ⌘⌥R / ⌘⌥P). Carbon
+    `RegisterEventHotKey` needs no extra entitlements (app is unsandboxed); or use a small
+    lib (e.g. `KeyboardShortcuts`) for storage + a recorder field. Complements the MenuBarExtra.
+20. **Native window controls for the chrome** — `.windowStyle(.hiddenTitleBar)`
+    (`WhisperBoxApp.swift:32`) + the custom 52px top bar (`RootView.swift:103–112`) cover the
+    title-bar region, so the window can't be dragged, double-clicked to zoom, or comfortably
+    resized. **Chosen direction: minimal fix** — keep the custom dark `Theme`, make the top
+    bar a draggable title-bar region (e.g. `WindowDragGesture` / transparent native title bar)
+    so move + zoom + resize work again. _Deferred alternative:_ full native
+    `NavigationSplitView` + `.toolbar` — most native, but forces a **light/dark theming**
+    project (`Theme` is dark-only; `.preferredColorScheme(.dark)` hard-forced at
+    `RootView.swift:40`), so not chosen now.
+21. **Switch primary UI language to English** — UI strings are hardcoded **French** across
+    `RootView.swift`, `Views/SectionViews.swift`, `Components.swift`, `WhisperBoxApp.swift`.
+    Either (a) straight replacement → single-language English app, or (b) proper localization
+    (String Catalog `.xcstrings`, English base + French secondary, `LocalizedStringKey`).
+    Decision TBD. Note: UI language is separate from the transcription `defaultLanguage`
+    (`AppSettings`) and the Claude prompt language — don't conflate them.
+
 ## Remaining next steps
 - Polish: History search (#9), audio duration (#10), menu-bar red glyph (#11).
 - Feature: configurable output directories (#17) — wire up `defaultOutputDir` (#7).
+- UX: global recording shortcuts (#19), native window controls — minimal fix (#20),
+  English UI (#21).
 - Robustness: transcription sleep-checkpoint (#12), test target (#14).
 - Distribution: notarization (#16) when going beyond beta testers.
 - Tidy: drop the unused `defaultModel` setting (#7).

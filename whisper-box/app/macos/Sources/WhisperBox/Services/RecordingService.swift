@@ -36,12 +36,7 @@ final class RecordingService {
     private var pausedAccum: TimeInterval = 0
     private var pauseStartedAt: Date?
 
-    private static var recordingsDir: URL {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Whisper Memory/recordings")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
+    private static var recordingsDir: URL { AppPaths.recordingsDir }
 
     /// `captureSystem` uses ScreenCaptureKit (needs Screen Recording permission).
     /// With it off, only the mic is recorded → no screen-recording prompt.
