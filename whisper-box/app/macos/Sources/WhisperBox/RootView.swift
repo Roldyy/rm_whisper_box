@@ -113,6 +113,7 @@ struct RootView: View {
         }
         .padding(.horizontal, 22)
         .frame(height: 52)
+        .background(TitleBarDragArea())          // drag-to-move + double-click-to-zoom
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.borderSubtle).frame(height: 1) }
     }
 
