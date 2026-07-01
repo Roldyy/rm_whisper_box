@@ -835,10 +835,10 @@ struct SettingsView: View {
                     divider
                     row("Model") {
                         Picker("", selection: $s.claudeModel) {
-                            Text("Opus 4.8").tag("claude-opus-4-8")
-                            Text("Sonnet 4.6").tag("claude-sonnet-4-6")
-                            Text("Haiku 4.5").tag("claude-haiku-4-5-20251001")
-                        }.labelsHidden().frame(width: 160)
+                            Text("Opus — highest quality").tag("opus")
+                            Text("Sonnet — balanced").tag("sonnet")
+                            Text("Haiku — fastest").tag("haiku")
+                        }.labelsHidden().frame(width: 200)
                     }
                 }
 

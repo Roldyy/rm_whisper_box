@@ -166,7 +166,7 @@ final class TranscriptionManager {
         let source = job.sourcePath
         let s = settings()
         let prompt = s?.claudePrompt ?? EnhancementService.defaultPrompt
-        let model = s?.claudeModel ?? "claude-opus-4-8"
+        let model = s?.claudeModel ?? "opus"
         enhancements[jobID] = EnhancementState(running: true)
         Task {
             do {

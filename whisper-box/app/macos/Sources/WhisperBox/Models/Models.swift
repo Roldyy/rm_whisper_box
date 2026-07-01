@@ -94,7 +94,10 @@ final class AppSettings {
     var defaultOutputFormat: String = "txt"
     var defaultOutputDir: String = ""
     // Claude enhancement (port of the CLI-based integration).
-    var claudeModel: String = "claude-opus-4-8"
+    // Alias (opus/sonnet/haiku), not a pinned ID — the CLI resolves it to the
+    // current generation, so new models are picked up without a code change and
+    // there's no retirement cliff when a specific version is sunset.
+    var claudeModel: String = "opus"
     /// Auto-generate a Claude summary after each transcription (manual summary is
     /// always available via the job detail, independent of this flag).
     var claudeAutoAfterTranscribe: Bool = false
