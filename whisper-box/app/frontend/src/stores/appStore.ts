@@ -3,6 +3,7 @@ import { create } from 'zustand'
 interface JobState {
   percent: number
   logs: string[]
+  error?: string
 }
 
 type Theme = 'dark' | 'light'
@@ -16,6 +17,7 @@ interface AppStore {
   setActiveJob: (id: number | null) => void
   updateJobProgress: (jobId: number, percent: number, segment?: string) => void
   appendLog: (jobId: number, message: string) => void
+  setJobError: (jobId: number, message: string) => void
   clearJob: (jobId: number) => void
   setSettings: (s: Record<string, string>) => void
   toggleTheme: () => void
@@ -57,6 +59,14 @@ export const useAppStore = create<AppStore>((set) => ({
       const next = new Map(state.runningJobs)
       const existing = next.get(jobId) ?? { percent: 0, logs: [] }
       next.set(jobId, { ...existing, logs: [...existing.logs, message] })
+      return { runningJobs: next }
+    }),
+
+  setJobError: (jobId, message) =>
+    set((state) => {
+      const next = new Map(state.runningJobs)
+      const existing = next.get(jobId) ?? { percent: 0, logs: [] }
+      next.set(jobId, { ...existing, error: message })
       return { runningJobs: next }
     }),
 

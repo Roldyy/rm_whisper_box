@@ -53,12 +53,10 @@ async def get_job(job_id: int, db: AsyncSession = Depends(get_db)):
     return _job_to_dict(job)
 
 
-@router.post("/jobs/{job_id}/cancel", status_code=200)
-async def cancel_job_endpoint(job_id: int):
-    """Cancel a running transcription job."""
-    from services.whisper_runner import cancel_job
-    cancel_job(job_id)
-    return {"cancelled": job_id}
+# NOTE: POST /jobs/{job_id}/cancel lives in api/transcription.py — it both
+# signals the cancellation token AND updates the job status in the DB. A second
+# definition here would shadow it (FastAPI keeps the first-registered route),
+# so it intentionally does not exist in this module.
 
 
 @router.delete("/jobs/{job_id}", status_code=204)

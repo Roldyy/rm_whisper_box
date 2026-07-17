@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["transcription"])
 
 class TranscribeRequest(BaseModel):
     source_path: str
-    model: str = "base"
+    model: str = "large-v3-turbo"
     language: str = ""
     output_format: str = "txt"
     output_dir: str = ""
@@ -32,9 +32,6 @@ class TranscribeRequest(BaseModel):
     word_timestamps: bool = False
     initial_prompt: str | None = None
     condition_on_previous_text: bool = True
-    fp16: bool = True
-    beam_size: int = 5
-    best_of: int = 5
     compression_ratio_threshold: float = 2.4
     no_speech_threshold: float = 0.6
 
@@ -85,6 +82,7 @@ async def transcribe(
         model=req.model,
         language=req.language or None,
         output_format=req.output_format,
+        output_dir=req.output_dir or None,
         status="pending",
         progress=0,
         task=req.task,
@@ -92,9 +90,6 @@ async def transcribe(
         word_timestamps=1 if req.word_timestamps else 0,
         initial_prompt=req.initial_prompt,
         condition_on_previous_text=1 if req.condition_on_previous_text else 0,
-        fp16=1 if req.fp16 else 0,
-        beam_size=req.beam_size,
-        best_of=req.best_of,
         compression_ratio_threshold=req.compression_ratio_threshold,
         no_speech_threshold=req.no_speech_threshold,
     )
@@ -152,6 +147,7 @@ async def rerun_job(job_id: int, db: AsyncSession = Depends(get_db)):
         model=original.model,
         language=original.language,
         output_format=original.output_format,
+        output_dir=original.output_dir,
         status="pending",
         progress=0,
         task=original.task,
@@ -159,9 +155,6 @@ async def rerun_job(job_id: int, db: AsyncSession = Depends(get_db)):
         word_timestamps=original.word_timestamps,
         initial_prompt=original.initial_prompt,
         condition_on_previous_text=original.condition_on_previous_text,
-        fp16=original.fp16,
-        beam_size=original.beam_size,
-        best_of=original.best_of,
         compression_ratio_threshold=original.compression_ratio_threshold,
         no_speech_threshold=original.no_speech_threshold,
     )

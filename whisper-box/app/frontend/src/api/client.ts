@@ -22,9 +22,6 @@ export interface TranscriptionJob {
   word_timestamps: number
   initial_prompt: string | null
   condition_on_previous_text: number
-  fp16: number
-  beam_size: number
-  best_of: number
   temperature: number
   compression_ratio_threshold: number
   no_speech_threshold: number
@@ -53,6 +50,12 @@ export interface Settings {
   default_language: string
   default_output_format: string
   default_output_dir: string
+  // Claude (IA) settings
+  claude_enabled?: string
+  claude_token_present?: string
+  claude_model?: string
+  claude_default_mode?: string
+  claude_auto_after_transcribe?: string
 }
 
 export interface HealthResponse {
@@ -75,9 +78,6 @@ export interface TranscribeRequest {
   word_timestamps?: boolean
   initial_prompt?: string | null
   condition_on_previous_text?: boolean
-  fp16?: boolean
-  beam_size?: number
-  best_of?: number
   compression_ratio_threshold?: number
   no_speech_threshold?: number
 }

@@ -14,3 +14,18 @@
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans antialiased;
   }
 }
+
+/* Indeterminate progress: a stripe that sweeps left-to-right. Used while the
+   transcription engine works without reporting incremental progress. */
+@keyframes wb-indeterminate {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+.wb-indeterminate-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40%;
+  animation: wb-indeterminate 1.2s ease-in-out infinite;
+}
