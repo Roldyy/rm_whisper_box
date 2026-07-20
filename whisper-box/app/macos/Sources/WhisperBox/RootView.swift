@@ -25,8 +25,12 @@ struct RootView: View {
     }
 
     @State private var selection: Section = .record
+    @State private var showCallPrompt = false
+    @State private var detectedAppName = "A call"
+    @State private var didAdoptStaging = false
     @Environment(TranscriptionManager.self) private var manager
     @Environment(RecordingService.self) private var recorder
+    @Environment(CallDetector.self) private var callDetector
     @Environment(\.modelContext) private var context
 
     var body: some View {
@@ -44,14 +48,49 @@ struct RootView: View {
         .onAppear {
             manager.modelContext = context
             recorder.transcriptionManager = manager
+            callDetector.recorder = recorder         // #5 — ignore our own mic use
+            AppDelegate.recorder = recorder          // #22 — finalize WAV on Quit
             AppLog.shared.modelContext = context
             AppLog.shared.prune()
-            if let s = try? context.fetch(FetchDescriptor<AppSettings>()).first {
-                AppPaths.setBase(s.defaultOutputDir)
+            // Ensure a settings row exists so every view (Record toggles, #32) can bind to it.
+            let existing = try? context.fetch(FetchDescriptor<AppSettings>()).first
+            let s = existing ?? { let n = AppSettings(); context.insert(n); try? context.save(); return n }()
+            AppPaths.setBase(s.defaultOutputDir)
+            // #10 — recover crash leftovers exactly once, and never while a recording
+            // is in flight (onAppear can fire again when the window is reopened).
+            if !didAdoptStaging, recorder.state == .idle, !recorder.isStarting {
+                didAdoptStaging = true
+                AppPaths.adoptOrphanedStagingRecordings()
             }
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)) { _ in
             Task { await recorder.handleSystemWillSleep() }
+        }
+        .onChange(of: callDetector.callStartToken) { _, _ in handleCallDetected() }
+        .alert("Start recording?", isPresented: $showCallPrompt) {
+            Button("Start") { Task { try? await recorder.startFromSettings() } }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("\(detectedAppName) looks like it just started a call.")
+        }
+    }
+
+    /// #36 — react to a detected call per the user's setting (off · ask · auto).
+    private func handleCallDetected() {
+        let idle = recorder.state == .idle || recorder.state == .stopped || recorder.state == .endedBySleep
+        guard idle else { return }
+        let mode = (try? context.fetch(FetchDescriptor<AppSettings>()).first)?.autoRecordMode ?? "off"
+        switch mode {
+        case "auto" where callDetector.lastDetectionWasFrontmost:
+            // Only silently record when the call app is frontmost — a background call
+            // app + some other app using the mic is likely a false positive (#3).
+            Task { try? await recorder.startFromSettings() }
+        case "auto", "ask":
+            detectedAppName = callDetector.lastDetectedApp ?? "A call"
+            NSApp.activate(ignoringOtherApps: true)
+            showCallPrompt = true
+        default:
+            break
         }
     }
 
@@ -177,7 +216,7 @@ struct MenuBarView: View {
                 Button("Resume") { recorder.resume() }
                 Button("Stop") { Task { await recorder.stopAndTranscribe() } }
             default:
-                Button("Start Recording") { Task { try? await recorder.start(captureSystem: true, captureMic: true) } }
+                Button("Start Recording") { Task { try? await recorder.startFromSettings() } }
             }
             if running > 0 {
                 Text("\(running) transcription(s) in progress").foregroundStyle(.secondary).font(.caption)

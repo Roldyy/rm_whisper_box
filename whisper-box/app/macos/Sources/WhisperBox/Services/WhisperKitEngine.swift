@@ -41,13 +41,16 @@ actor WhisperKitEngine: TranscriptionEngine {
         language: String?,
         onProgress: @escaping ProgressHandler
     ) async throws -> [TranscriptSegment] {
-        let duration = audioDuration(audioPath)
+        // Decode ourselves (AVAssetReader → 16 kHz mono Float) instead of WhisperKit's
+        // AVAudioFile loader, which throws Core Audio -50 on mp4/mov. See `AudioDecode`.
+        let samples = try await AudioDecode.pcm16kMono(path: audioPath)
+        let duration = Double(samples.count) / 16_000.0
         let totalWindows = max(1.0, (duration / 30.0).rounded(.up))
 
         let pipe = try await pipeline()   // loaded once; reused thereafter
 
         let results = try await pipe.transcribe(
-            audioPath: audioPath,
+            audioArray: samples,
             decodeOptions: DecodingOptions(language: language),
             callback: { progress in
                 let frac = min(Double(progress.windowId + 1) / totalWindows, 0.99)
@@ -61,11 +64,6 @@ actor WhisperKitEngine: TranscriptionEngine {
         }
         onProgress(1.0, segments.map(\.text).joined())
         return segments
-    }
-
-    private nonisolated func audioDuration(_ path: String) -> Double {
-        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return 0 }
-        return Double(file.length) / file.fileFormat.sampleRate
     }
 }
 #endif

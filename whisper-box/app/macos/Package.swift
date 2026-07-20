@@ -27,5 +27,12 @@ let package = Package(
             // not the SwiftPM build — exclude it to avoid an unhandled-resource warning.
             exclude: ["Assets.xcassets"]
         ),
+        // Unit tests for the pure-logic pieces (no UI / WhisperKit model / TCC needed).
+        // Run with `swift test`. UI + capture paths are only exercisable in the app bundle.
+        .testTarget(
+            name: "WhisperBoxTests",
+            dependencies: ["WhisperBox"],
+            path: "Tests/WhisperBoxTests"
+        ),
     ]
 )

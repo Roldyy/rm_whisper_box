@@ -4,9 +4,12 @@ import Security
 /// Native Keychain access (replaces the Python `/usr/bin/security` wrapper).
 /// Stores the Claude OAuth token; same service name for continuity.
 enum KeychainService {
-    private static let service = "whisperbox-claude-oauth"
+    /// Claude OAuth token (default service — keeps existing call sites unchanged).
+    static let claude = "whisperbox-claude-oauth"
+    /// #38 — Odoo External API key.
+    static let odoo = "whisperbox-odoo-apikey"
 
-    static func set(_ value: String, account: String = NSUserName()) {
+    static func set(_ value: String, service: String = claude, account: String = NSUserName()) {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -19,7 +22,7 @@ enum KeychainService {
         SecItemAdd(add as CFDictionary, nil)
     }
 
-    static func get(account: String = NSUserName()) -> String? {
+    static func get(service: String = claude, account: String = NSUserName()) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -33,7 +36,7 @@ enum KeychainService {
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete(account: String = NSUserName()) {
+    static func delete(service: String = claude, account: String = NSUserName()) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

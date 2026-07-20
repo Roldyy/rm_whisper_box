@@ -26,7 +26,27 @@ final class AppLog {
         guard let ctx = modelContext else { return }
         ctx.insert(ExecutionLog(level: level, operationType: operation,
                                 message: message, logContent: detail, job: job))
-        try? ctx.save()
+        scheduleSave()   // #5 — coalesce writes instead of a save() per log line
+    }
+
+    /// #5 — debounce SwiftData writes so a burst of log lines (e.g. during recording)
+    /// doesn't force one synchronous disk write each.
+    private var saveScheduled = false
+    private func scheduleSave() {
+        guard !saveScheduled else { return }
+        saveScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)   // 0.5 s coalescing window
+            saveScheduled = false
+            try? modelContext?.save()
+        }
+    }
+
+    /// #6 — resolve a job from its (Sendable) identifier on the main actor, so callers
+    /// never hand a non-Sendable @Model across actors.
+    func job(for id: PersistentIdentifier) -> TranscriptionJob? {
+        guard let ctx = modelContext else { return nil }
+        return ctx.model(for: id) as? TranscriptionJob
     }
 
     /// Drop logs older than `retentionDays`, then cap to the newest `maxLogCount`.
@@ -85,11 +105,14 @@ enum Log {
             case .warning:          logger.warning("\(line, privacy: .public)")
             case .error:            logger.error("\(line, privacy: .public)")
             }
-            // Persisted row — hop to MainActor for SwiftData.
+            // Persisted row — hop to MainActor for SwiftData. Pass the job's Sendable
+            // identifier (not the non-Sendable @Model) across the actor boundary (#6).
             let op = operation
+            let jobID = job?.persistentModelID
             Task { @MainActor in
+                let resolvedJob = jobID.flatMap { AppLog.shared.job(for: $0) }
                 AppLog.shared.persist(level: level, operation: op,
-                                      message: message, detail: detail, job: job)
+                                      message: message, detail: detail, job: resolvedJob)
             }
         }
     }

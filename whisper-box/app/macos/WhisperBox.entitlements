@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened Runtime is required for notarization. This app is NOT sandboxed
+         (it shells out to the `claude` CLI and captures system audio via
+         ScreenCaptureKit), so the only entitlement needed is microphone access,
+         which Hardened Runtime gates. Network access and spawning the external
+         `claude` binary need no entitlement outside the App Sandbox. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
+</plist>

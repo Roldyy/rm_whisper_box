@@ -44,7 +44,8 @@ final class LiveTranscriber {
     private var buffer: [Float] = []
     private var bufferStartSeconds: Double = 0
     private var newSamplesSinceRun = 0
-    private var draining = false
+    private var drainTask: Task<Void, Never>?   // #2 — the single in-flight drain (guards reentrancy)
+    private var sessionID = 0                    // #3 — bumped on start/cancel; invalidates stale passes
 
     // Tuning — mirrors AudioStreamTranscriber defaults.
     private let requiredSegmentsForConfirmation = 2
@@ -52,17 +53,24 @@ final class LiveTranscriber {
     private let silenceThreshold: Float = 0.3    // relative-energy VAD gate
     private let maxBufferSeconds = 30.0          // safety cap on the re-decode window
 
-    // VAD running noise floor (the quietest energy seen so far).
+    // VAD noise floor — the quietest energy over a rolling window (#1). Tracking a
+    // plain all-time minimum let one near-silent window pin the floor near zero
+    // forever, after which everything read as "voiced" and Whisper hallucinated on
+    // silence. A rolling min lets that blip age out.
     private var minEnergy: Float = 1e-3
+    private var recentEnergies: [Float] = []
+    private let energyHistoryCount = 100   // ~10 s at 100 ms windows
 
     init(engine: TranscriptionEngine = TranscriptionEngineFactory.make()) {
         self.engine = engine
     }
 
     func start(language: String?) {
+        sessionID &+= 1                 // #3 — new session; any stale pass/drain becomes a no-op
         confirmedSegments = []; unconfirmedSegments = []
         buffer = []; bufferStartSeconds = 0; newSamplesSinceRun = 0
-        minEnergy = 1e-3
+        minEnergy = 1e-3; recentEnergies = []
+        drainTask?.cancel(); drainTask = nil
         self.language = language; active = true
     }
 
@@ -70,27 +78,42 @@ final class LiveTranscriber {
         guard active else { return }
         buffer.append(contentsOf: samples)
         newSamplesSinceRun += samples.count
-        Task { await drain() }
+        if drainTask == nil { drainTask = Task { await drain() } }   // #2 — one drain at a time
+    }
+
+    /// #23 — abandon the session without a tail pass (used when a recording fails
+    /// to start). Clears everything so the next `start()` begins clean.
+    func cancel() {
+        sessionID &+= 1                 // #3 — invalidate any in-flight pass/drain
+        active = false
+        drainTask?.cancel(); drainTask = nil
+        confirmedSegments = []; unconfirmedSegments = []
+        buffer = []; newSamplesSinceRun = 0; recentEnergies = []
     }
 
     /// Transcribe the remaining tail when recording stops, then lock everything in.
     func finish() async {
         active = false
+        await drainTask?.value          // #2 — let the in-flight drain settle; no interleaved pass
         if !buffer.isEmpty { await runPass(force: true) }
         confirmedSegments.append(contentsOf: unconfirmedSegments)
         unconfirmedSegments = []
     }
 
+    /// One drain at a time (guarded by `drainTask` in `ingest`), so passes never
+    /// interleave across the `await` inside `runPass` (#2). Bound to a session so a
+    /// drain left over from a cancelled/restarted session exits and doesn't clobber
+    /// the new session's `drainTask` (#3).
     private func drain() async {
-        guard !draining else { return }
-        draining = true
-        defer { draining = false }
-        while active, newSamplesSinceRun >= minNewSamplesToRun {
+        let session = sessionID
+        defer { if session == sessionID { drainTask = nil } }
+        while active, session == sessionID, newSamplesSinceRun >= minNewSamplesToRun {
             await runPass(force: false)
         }
     }
 
     private func runPass(force: Bool) async {
+        let session = sessionID                 // #3 — snapshot; bail if the session changes across the await
         let chunk = buffer
         newSamplesSinceRun = 0
         guard !chunk.isEmpty else { return }
@@ -103,6 +126,7 @@ final class LiveTranscriber {
 
         guard let segs = try? await engine.transcribe(samples: chunk, language: language),
               !segs.isEmpty else { return }
+        guard session == sessionID else { return }   // #3 — a cancel/restart happened; discard this pass
 
         // Shift segment times from buffer-relative to absolute.
         let abs = segs.map {
@@ -174,7 +198,7 @@ final class LiveTranscriber {
         var i = 0
         while i + windowSize <= samples.count {
             let avg = averageEnergy(of: Array(samples[i ..< i + windowSize]))
-            if avg < minEnergy { minEnergy = max(1e-8, avg) }   // track noise floor
+            minEnergy = updatedFloor(with: avg)   // #1 — rolling-min noise floor
             if relativeEnergyValue(signalEnergy: avg, reference: minEnergy) > silenceThreshold {
                 voiced = true
             }
@@ -185,8 +209,16 @@ final class LiveTranscriber {
 
     private func relativeEnergy(of samples: [Float]) -> Float {
         let avg = averageEnergy(of: samples)
-        if avg < minEnergy { minEnergy = max(1e-8, avg) }
+        minEnergy = updatedFloor(with: avg)   // #1
         return relativeEnergyValue(signalEnergy: avg, reference: minEnergy)
+    }
+
+    /// #1 — rolling-minimum noise floor over the last ~10 s of windows, so an
+    /// anomalously quiet window ages out instead of pinning the floor near zero.
+    private func updatedFloor(with avg: Float) -> Float {
+        recentEnergies.append(avg)
+        if recentEnergies.count > energyHistoryCount { recentEnergies.removeFirst() }
+        return max(1e-8, recentEnergies.min() ?? avg)
     }
 
     /// RMS energy of a signal chunk.

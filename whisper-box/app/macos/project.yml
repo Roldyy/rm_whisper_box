@@ -43,5 +43,10 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "WhisperBox records the microphone for transcription."
         INFOPLIST_KEY_LSUIElement: NO
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 66UL8CW95D
+        DEVELOPMENT_TEAM: U3TUL63HHK
         COMBINE_HIDPI_IMAGES: YES
+        # Hardened Runtime + entitlements — required for notarization (Developer ID).
+        # The mic entitlement lives in WhisperBox.entitlements; see build-dmg.sh for
+        # the Developer ID signing + notarize/staple flow.
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: WhisperBox.entitlements

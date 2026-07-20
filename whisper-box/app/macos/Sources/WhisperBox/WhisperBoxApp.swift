@@ -1,9 +1,35 @@
 import SwiftUI
 import SwiftData
+import AppKit
+
+/// #22 — on Quit while recording, finalize the WAV before the process dies (otherwise
+/// the RIFF header keeps `dataSize: 0` and the file plays as empty). The recorder is
+/// registered from `RootView.onAppear`; termination is deferred until `stop()` returns.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    static weak var recorder: RecordingService?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // #6 — don't let a broken pipe (e.g. the claude CLI exiting before it reads
+        // stdin) raise SIGPIPE and kill the app; the write surfaces EPIPE instead.
+        signal(SIGPIPE, SIG_IGN)
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let rec = AppDelegate.recorder, rec.state == .recording || rec.state == .paused else {
+            return .terminateNow
+        }
+        Task { @MainActor in
+            await rec.stopForTermination()                     // finalize + persist, no unused tail pass
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
 
 /// App entry point. Single SwiftUI process — no server, no localhost, no Python.
 @main
 struct WhisperBoxApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     /// SwiftData container for jobs / logs / settings (local store in Application Support).
     let container: ModelContainer = {
         do {
@@ -17,6 +43,8 @@ struct WhisperBoxApp: App {
     @State private var manager = TranscriptionManager()
     /// App-scoped — recording survives navigation too.
     @State private var recorder = RecordingService()
+    /// #36 — emits a signal when a call likely starts (Core Audio mic-in-use edge).
+    @State private var callDetector = CallDetector()
 
     private func shortTime(_ t: TimeInterval) -> String {
         let s = Int(t); return String(format: "%d:%02d", s / 60, s % 60)
@@ -27,6 +55,7 @@ struct WhisperBoxApp: App {
             RootView()
                 .environment(manager)
                 .environment(recorder)
+                .environment(callDetector)
         }
         .modelContainer(container)
         .windowStyle(.hiddenTitleBar)
@@ -38,7 +67,7 @@ struct WhisperBoxApp: App {
                         if recorder.state == .recording || recorder.state == .paused {
                             await recorder.stopAndTranscribe()
                         } else {
-                            try? await recorder.start(captureSystem: true, captureMic: true)
+                            try? await recorder.startFromSettings()
                         }
                     }
                 }
@@ -52,9 +81,17 @@ struct WhisperBoxApp: App {
                 .environment(manager)
                 .environment(recorder)
         } label: {
-            if recorder.state == .recording {
-                Label(shortTime(recorder.elapsed), systemImage: "waveform")
-            } else {
+            switch recorder.state {
+            case .recording:
+                // #11 — red record glyph + elapsed time while capturing.
+                Label {
+                    Text(shortTime(recorder.elapsed))
+                } icon: {
+                    Image(systemName: "record.circle.fill").foregroundStyle(.red)
+                }
+            case .paused:
+                Label(shortTime(recorder.elapsed), systemImage: "pause.circle")
+            default:
                 Image(systemName: "waveform")
             }
         }

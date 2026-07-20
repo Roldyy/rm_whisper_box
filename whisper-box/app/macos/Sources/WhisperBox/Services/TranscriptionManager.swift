@@ -24,8 +24,16 @@ final class TranscriptionManager {
         var error: String?
     }
 
+    /// #38 — Odoo Knowledge push state per job.
+    struct OdooPushState {
+        var running = false
+        var url: String?
+        var error: String?
+    }
+
     private(set) var runs: [UUID: RunState] = [:]
     private(set) var enhancements: [UUID: EnhancementState] = [:]
+    private(set) var odooPushes: [UUID: OdooPushState] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private let engine = TranscriptionEngineFactory.make()
     private let enhancer = EnhancementService()
@@ -35,10 +43,11 @@ final class TranscriptionManager {
 
     /// Returns the job id immediately; transcription runs in the background.
     @discardableResult
-    func start(filePath: String, language: String? = nil) -> UUID {
+    func start(filePath: String, language: String? = nil, videoPath: String? = nil) -> UUID {
         let url = URL(fileURLWithPath: filePath)
         let job = TranscriptionJob(sourcePath: filePath, sourceFilename: url.lastPathComponent)
         job.status = .running
+        job.videoPath = videoPath   // #8 — keep the recording's video linked on the batch path
         modelContext?.insert(job)
         try? modelContext?.save()
 
@@ -58,12 +67,31 @@ final class TranscriptionManager {
         return l.isEmpty ? nil : l
     }
 
+    /// #35 — video capture mode ("off" | "screen" | "app") + chosen app, read by
+    /// the recorder at start so every start path (⌘R, menu bar, auto-start) agrees.
+    func videoCaptureMode() -> String { settings()?.videoCaptureMode ?? "off" }
+    func videoAppBundleID() -> String { settings()?.videoAppBundleID ?? "" }
+
+    /// #32 — persisted capture sources, read by every start path.
+    func captureSystem() -> Bool { settings()?.captureSystem ?? true }
+    func captureMic() -> Bool { settings()?.captureMic ?? true }
+
     /// All transcripts/summaries are written here (not next to the source file).
     static var transcriptsDir: URL { AppPaths.transcriptsDir }
 
+    /// #25 — a non-colliding path in the transcripts dir. Two sources with the same
+    /// basename (or a re-transcribe/re-summarize) get a `-1`, `-2`, … suffix instead
+    /// of silently overwriting the earlier `.txt` / `.summary.md`.
     private func outputURL(forSource source: String, ext: String) -> URL {
         let base = URL(fileURLWithPath: source).deletingPathExtension().lastPathComponent
-        return AppPaths.transcriptsDir.appendingPathComponent("\(base).\(ext)")
+        let dir = AppPaths.transcriptsDir
+        var url = dir.appendingPathComponent("\(base).\(ext)")
+        var n = 1
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("\(base)-\(n).\(ext)")
+            n += 1
+        }
+        return url
     }
 
     /// Load the model in the background (e.g. while recording) so transcription
@@ -73,12 +101,15 @@ final class TranscriptionManager {
     /// Persist an already-produced transcript (the live recording result) as a
     /// completed job — no redundant batch pass. A full re-transcribe stays
     /// available on demand via `start(filePath:)`.
-    func saveRecordingResult(filePath: String, transcript: String) {
+    func saveRecordingResult(filePath: String, transcript: String,
+                             videoPath: String? = nil, duration: TimeInterval? = nil) {
         let url = URL(fileURLWithPath: filePath)
         let job = TranscriptionJob(sourcePath: filePath, sourceFilename: url.lastPathComponent)
         job.status = .success
         job.progress = 100
         job.transcriptText = transcript
+        job.videoPath = videoPath
+        if let d = duration, d > 0 { job.durationAudio = d }   // #27
         let outURL = outputURL(forSource: filePath, ext: "txt")
         try? transcript.write(to: outURL, atomically: true, encoding: .utf8)
         job.outputPath = outURL.path
@@ -104,6 +135,7 @@ final class TranscriptionManager {
 
             // Note: don't capture the @Model `job` in this @Sendable closure (data race).
             // Live progress is tracked in `runs[jobID]`; the model is updated on completion.
+            let runStarted = Date()   // #29 — measure transcription wall-clock
             let segs = try await engine.transcribe(audioPath: filePath, language: language) { [weak self] frac, text in
                 Task { @MainActor in
                     guard let self else { return }
@@ -133,6 +165,7 @@ final class TranscriptionManager {
                 job.outputFormat = fmt.rawValue
                 job.transcriptText = OutputFormatter.render(segs, as: .txt)
                 if let end = segs.last?.end, end > 0 { job.durationAudio = end }
+                job.durationRun = Date().timeIntervalSince(runStarted)   // #29
                 try? modelContext?.save()
                 Log.transcription.success("Transcription complete", job: job, detail: "\(segs.count) segments")
 
@@ -144,9 +177,12 @@ final class TranscriptionManager {
             runs[jobID]?.preparingModel = false
             runs[jobID]?.status = .error
             job.status = .error
-            job.errorMessage = error.localizedDescription
+            let name = URL(fileURLWithPath: filePath).lastPathComponent
+            job.errorMessage = error.isFilePermissionError
+                ? "Can't read “\(name)” — WhisperBox was denied access to it. Grant access in System Settings → Privacy & Security → Files and Folders, then transcribe again."
+                : error.fullDescription
             try? modelContext?.save()
-            Log.transcription.error("Transcription failed", job: job, detail: error.localizedDescription)
+            Log.transcription.error("Transcription failed", job: job, detail: "\(filePath) — \(error.fullDescription)")
         }
         tasks[jobID] = nil
         if !hasRunningJobs { power.release() }
@@ -177,9 +213,55 @@ final class TranscriptionManager {
                 job.summaryPath = url.path
                 try? modelContext?.save()
                 Log.enhancement.success("Claude summary generated", job: job)
+                if settings()?.odooAutoPush == true { pushToOdoo(jobID: jobID) }   // #38
             } catch {
                 enhancements[jobID] = EnhancementState(running: false, error: error.localizedDescription)
                 Log.enhancement.error("Claude summary failed", job: job, detail: error.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: - Odoo Knowledge push (#38)
+
+    /// True when the URL/database/login/API-key are all present.
+    var odooConfigured: Bool { odooConfig() != nil }
+
+    private func odooConfig() -> OdooConfig? {
+        guard let s = settings() else { return nil }
+        let key = KeychainService.get(service: KeychainService.odoo) ?? ""
+        guard !s.odooBaseURL.isEmpty, !s.odooDatabase.isEmpty,
+              !s.odooLogin.isEmpty, !key.isEmpty else { return nil }
+        return OdooConfig(baseURL: s.odooBaseURL, database: s.odooDatabase, login: s.odooLogin, apiKey: key)
+    }
+
+    /// Push a job's summary (or transcript, if not yet summarized) to Odoo Knowledge
+    /// as a Private article owned by the connecting user.
+    func pushToOdoo(jobID: UUID) {
+        guard let job = fetchJob(jobID) else { return }
+        guard let cfg = odooConfig() else {
+            odooPushes[jobID] = OdooPushState(running: false,
+                error: "Odoo isn't configured — set the URL, database, login, and API key in Settings.")
+            Log.enhancement.warning("Odoo not configured", job: job)
+            return
+        }
+        let bodyMD = job.summaryPath.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
+            ?? job.transcriptText
+        guard !bodyMD.isEmpty else { return }
+        let title = "Meeting notes — " + job.createdAt.formatted(date: .abbreviated, time: .shortened)
+        odooPushes[jobID] = OdooPushState(running: true)
+        Task {
+            do {
+                let svc = OdooService(config: cfg)
+                let (id, url) = try await svc.pushPrivateArticle(
+                    title: title, bodyHTML: OdooService.htmlFromMarkdown(bodyMD))
+                job.odooArticleID = id
+                job.odooArticleURL = url
+                try? modelContext?.save()
+                odooPushes[jobID] = OdooPushState(running: false, url: url)
+                Log.enhancement.success("Pushed to Odoo Knowledge", job: job, detail: url)
+            } catch {
+                odooPushes[jobID] = OdooPushState(running: false, error: error.localizedDescription)
+                Log.enhancement.error("Odoo push failed", job: job, detail: error.localizedDescription)
             }
         }
     }

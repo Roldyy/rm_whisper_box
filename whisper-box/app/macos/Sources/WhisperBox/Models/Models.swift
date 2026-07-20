@@ -51,6 +51,9 @@ final class TranscriptionJob {
     var outputPath: String?
     var transcriptText: String = ""      // full transcript, for enhancement / reuse
     var summaryPath: String?             // Claude enhancement output (.summary.md)
+    var videoPath: String?               // #35 — optional screen/app recording (.mp4)
+    var odooArticleID: Int?              // #38 — id of the pushed Odoo Knowledge article
+    var odooArticleURL: String?         // #38 — link to view it in Odoo
     var statusRaw: String = JobStatus.pending.rawValue
     var progress: Int = 0            // 0–100
     var durationAudio: Double?       // seconds
@@ -93,6 +96,9 @@ final class AppSettings {
     var defaultLanguage: String = ""        // "" = auto
     var defaultOutputFormat: String = "txt"
     var defaultOutputDir: String = ""
+    /// #32 — capture sources, persisted so ⌘R / menu bar / auto-start all agree.
+    var captureSystem: Bool = true
+    var captureMic: Bool = true
     // Claude enhancement (port of the CLI-based integration).
     // Alias (opus/sonnet/haiku), not a pinned ID — the CLI resolves it to the
     // current generation, so new models are picked up without a code change and
@@ -103,8 +109,18 @@ final class AppSettings {
     var claudeAutoAfterTranscribe: Bool = false
     /// Instruction prepended to the transcript when enhancing (editable in Settings).
     var claudePrompt: String = EnhancementService.defaultPrompt
-    // Future §11.1 — Odoo Knowledge push.
-    var odooBaseURL: String = ""
+    /// #36 — behavior when a Teams/Zoom/… call is detected: "off" | "ask" | "auto".
+    var autoRecordMode: String = "off"
+    /// #35 — record video alongside audio: "off" | "screen" (full display) | "app".
+    var videoCaptureMode: String = "off"
+    /// #35 — bundle id of the app to capture when `videoCaptureMode == "app"`.
+    var videoAppBundleID: String = ""
+    // #38 — Odoo Knowledge push. API key lives in the Keychain (`KeychainService.odoo`).
+    var odooBaseURL: String = ""        // e.g. https://mycompany.odoo.com
+    var odooDatabase: String = ""       // Odoo database name
+    var odooLogin: String = ""          // user login/email (still required with an API key)
+    /// Push the summary to Odoo automatically once a Claude summary is generated.
+    var odooAutoPush: Bool = false
 
     init() {}
 }

@@ -50,6 +50,16 @@ final class WAVWriter {
         dataByteCount += UInt32(pcm.count); lock.unlock()
     }
 
+    /// #22 — rewrite the RIFF header from the bytes written so far *without closing*,
+    /// so a hard crash / power loss still leaves a playable file (finalize writes the
+    /// authoritative header on a clean stop). Cheap: the handle is already open.
+    func flushHeader() {
+        lock.lock(); defer { lock.unlock() }
+        guard fileHandle != nil else { return }
+        writeHeader(dataSize: dataByteCount)                 // seeks to 0, writes 44 bytes
+        fileHandle?.seekToEndOfFile()                        // leave the cursor at the tail
+    }
+
     func finalize() {
         lock.lock(); defer { lock.unlock() }
         writeHeader(dataSize: dataByteCount); fileHandle?.closeFile(); fileHandle = nil
@@ -64,6 +74,9 @@ final class AudioMixer {
     private var accumulator: [Float] = []
     private var flushedCount: Int = 0
     private var cursors: [Int]
+    private var lastAdvance: [Date]          // #24 — per-source last-delivery time
+    private var stalled: Set<Int> = []
+    private let stallThreshold: TimeInterval = 8
 
     /// §10.1 — while paused, incoming samples are dropped so paused time is
     /// excluded and the saved audio stays contiguous (the SCStream stays alive).
@@ -73,15 +86,27 @@ final class AudioMixer {
     /// transcription. Must be lightweight (it runs under the mixer lock).
     var onFlush: (([Float]) -> Void)?
 
-    init(writer: WAVWriter, sourceCount: Int) {
+    /// #24 — invoked (source index) when a source is declared stalled and dropped.
+    var onStall: ((Int) -> Void)?
+
+    /// Clock seam — injectable so the stall detector is unit-testable (default: wall clock).
+    private let now: () -> Date
+
+    init(writer: WAVWriter, sourceCount: Int, now: @escaping () -> Date = { Date() }) {
         self.writer = writer
+        self.now = now
         self.cursors = Array(repeating: 0, count: sourceCount)
+        self.lastAdvance = Array(repeating: now(), count: sourceCount)
     }
 
     func append(source: Int, samples: [Float]) {
         guard !samples.isEmpty else { return }
         lock.lock(); defer { lock.unlock() }
         guard !isPaused else { return }
+        // #1 — a finished/stalled source is parked at Int.max; late buffers from a
+        // source whose capture wasn't actually stopped (checkStall marks it done but
+        // leaves the SCStream/mic running) would overflow `start + samples.count`.
+        guard cursors[source] != Int.max else { return }
 
         let start = cursors[source]
         let needed = (start + samples.count) - flushedCount
@@ -91,13 +116,54 @@ final class AudioMixer {
         var idx = start - flushedCount
         for s in samples { accumulator[idx] += s; idx += 1 }
         cursors[source] = start + samples.count
+        lastAdvance[source] = now()
         flushReady()
     }
 
     func finish(source: Int) {
         lock.lock(); defer { lock.unlock() }
+        _finish(source: source)
+    }
+
+    private func _finish(source: Int) {
         cursors[source] = Int.max
         flushReady()
+    }
+
+    /// #24 fix — call on **resume** so a long pause isn't mistaken for a stall. During
+    /// pause `append` early-returns without touching `lastAdvance`, so it still holds
+    /// the pre-pause time; without this, a pause longer than `stallThreshold` makes
+    /// `checkStall` drop a still-live source the moment the other one delivers again.
+    func resetStallClocks() {
+        lock.lock(); defer { lock.unlock() }
+        let t = now()
+        for i in lastAdvance.indices { lastAdvance[i] = t }
+    }
+
+    /// #24 — if one source goes silent (mic unplugged, SCStream stalls without
+    /// `didStopWithError`) while another keeps delivering, the `min(cursors)`
+    /// watermark freezes and audio accumulates unbounded with the file + live
+    /// transcript stuck. Detect a source idle past the threshold *while another is
+    /// still moving* and finish it so flushing resumes. Called ~1 Hz from the timer.
+    func checkStall() {
+        var stalledNow: [Int] = []
+        lock.lock()
+        if cursors.count > 1 && !isPaused {
+            let t = now()
+            for s in 0..<cursors.count where cursors[s] != Int.max && !stalled.contains(s) {
+                guard t.timeIntervalSince(lastAdvance[s]) > stallThreshold else { continue }
+                let othersMoving = (0..<cursors.count).contains { o in
+                    o != s && cursors[o] != Int.max && t.timeIntervalSince(lastAdvance[o]) < stallThreshold
+                }
+                if othersMoving {
+                    stalled.insert(s)
+                    stalledNow.append(s)
+                    _finish(source: s)
+                }
+            }
+        }
+        lock.unlock()
+        stalledNow.forEach { onStall?($0) }   // notify outside the lock
     }
 
     private func flushReady() {
@@ -164,6 +230,72 @@ final class SystemAudioCapturer: NSObject, SCStreamOutput, SCStreamDelegate {
             samples = Array(UnsafeBufferPointer(start: floatPtr, count: frameCount))
         }
         mixer.append(source: sourceIndex, samples: samples)
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) { onStop?(error) }
+}
+
+// MARK: - Video via SCStream → AVAssetWriter (#35)
+
+/// Encodes `.screen` sample buffers from an SCStream into an H.264 `.mp4`.
+/// Audio is handled separately (the WAV pipeline stays the transcription source);
+/// this is a standalone video deliverable. Only `.complete` frames are appended,
+/// and the writer session starts on the first frame so timestamps line up.
+final class VideoRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
+    let url: URL
+    var onStop: ((Error) -> Void)?
+
+    private let writer: AVAssetWriter
+    private let input: AVAssetWriterInput
+    private var started = false
+    private var failed = false
+    private var paused = false
+    private let lock = NSLock()
+
+    /// #4 — while paused, drop incoming frames so the .mp4 doesn't record private
+    /// screen content the user believes is paused (mirrors the AudioMixer pause gate).
+    func setPaused(_ p: Bool) { lock.lock(); paused = p; lock.unlock() }
+
+    init(url: URL, width: Int, height: Int) throws {
+        self.url = url
+        writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let settings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+        ]
+        input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+        input.expectsMediaDataInRealTime = true
+        super.init()
+        if writer.canAdd(input) { writer.add(input) }
+    }
+
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard type == .screen, sampleBuffer.isValid, sampleBuffer.numSamples > 0 else { return }
+        // Skip idle/blank frames (no on-screen change) — only encode complete ones.
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+                as? [[SCStreamFrameInfo: Any]],
+              let statusRaw = attachments.first?[.status] as? Int,
+              SCFrameStatus(rawValue: statusRaw) == .complete else { return }
+
+        lock.lock(); defer { lock.unlock() }
+        guard !paused, !failed else { return }        // #4 — don't record paused frames
+        if !started {
+            // Only try startWriting once — calling it again on a .failed writer throws.
+            guard writer.startWriting() else { failed = true; return }
+            writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            started = true
+        }
+        if input.isReadyForMoreMediaData { input.append(sampleBuffer) }
+    }
+
+    /// Finalize the file. No-op if no frames were ever written. Called only after
+    /// the stream's `stopCapture()` has been awaited, so no frame is in flight and
+    /// `started` can be read without the sample-handler lock.
+    func finish() async {
+        guard started else { writer.cancelWriting(); return }
+        input.markAsFinished()
+        await writer.finishWriting()
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) { onStop?(error) }

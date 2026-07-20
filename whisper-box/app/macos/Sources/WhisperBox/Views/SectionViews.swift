@@ -161,8 +161,7 @@ struct TranscribeView: View {
 
 struct RecordView: View {
     @Environment(RecordingService.self) private var recorder
-    @State private var captureSystem = true
-    @State private var captureMic = true
+    @Query private var allSettings: [AppSettings]
     @State private var startError: String?
 
     private var idle: Bool {
@@ -171,11 +170,16 @@ struct RecordView: View {
 
     var body: some View {
         @Bindable var recorder = recorder
-        if idle { idleView(recorder) } else { activeView }
+        if idle {
+            if let s = allSettings.first { idleView(recorder, s) } else { Color.clear }
+        } else {
+            activeView
+        }
     }
 
-    private func idleView(_ recorder: RecordingService) -> some View {
+    private func idleView(_ recorder: RecordingService, _ settings: AppSettings) -> some View {
         @Bindable var recorder = recorder
+        @Bindable var s = settings
         return VStack(spacing: 26) {
             VStack(spacing: 18) {
                 RecordButton { Task { await start() } }
@@ -190,10 +194,10 @@ struct RecordView: View {
                 VStack(spacing: 0) {
                     ToggleRow(title: "Include system audio",
                               subtitle: "Captures the computer's sound (requires screen recording permission)",
-                              isOn: $captureSystem)
+                              isOn: $s.captureSystem)
                     Rectangle().fill(Theme.border).frame(height: 1)
                     ToggleRow(title: "Include microphone",
-                              subtitle: "Records your voice", isOn: $captureMic)
+                              subtitle: "Records your voice", isOn: $s.captureMic)
                     Rectangle().fill(Theme.border).frame(height: 1)
                     ToggleRow(title: "Live transcription",
                               subtitle: "Shows text while recording", isOn: $recorder.liveEnabled)
@@ -202,8 +206,8 @@ struct RecordView: View {
             .frame(width: 444)
 
             HStack(spacing: 10) {
-                if captureSystem { Chip(label: "System output", dot: Theme.accent) }
-                if captureMic { Chip(label: "Built-in mic", dot: Theme.accent) }
+                if s.captureSystem { Chip(label: "System output", dot: Theme.accent) }
+                if s.captureMic { Chip(label: "Built-in mic", dot: Theme.accent) }
             }
 
             if let err = startError ?? recorder.lastError {
@@ -253,7 +257,7 @@ struct RecordView: View {
                     .tint(Theme.red)
                 }
                 HStack(spacing: 9) {
-                    if captureMic { Chip(label: "Mic included", dot: Theme.green) }
+                    if allSettings.first?.captureMic ?? true { Chip(label: "Mic included", dot: Theme.green) }
                     if recorder.liveEnabled { Chip(label: "Live transcription", dot: Theme.accent) }
                 }
             }
@@ -272,7 +276,7 @@ struct RecordView: View {
 
     private func start() async {
         startError = nil
-        do { try await recorder.start(captureSystem: captureSystem, captureMic: captureMic) }
+        do { try await recorder.startFromSettings() }
         catch { startError = error.localizedDescription }
     }
 
@@ -286,10 +290,21 @@ struct HistoryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \TranscriptionJob.createdAt, order: .reverse) private var jobs: [TranscriptionJob]
     @State private var selected: TranscriptionJob?
+    @State private var query = ""
 
     private func isRunning(_ job: TranscriptionJob) -> Bool { manager.runs[job.id]?.status == .running }
     private var running: [TranscriptionJob] { jobs.filter(isRunning) }
     private var done: [TranscriptionJob] { jobs.filter { !isRunning($0) } }
+
+    /// #9 — filter completed jobs by filename or transcript text.
+    private var filteredDone: [TranscriptionJob] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return done }
+        return done.filter {
+            $0.sourceFilename.localizedCaseInsensitiveContains(q)
+                || $0.transcriptText.localizedCaseInsensitiveContains(q)
+        }
+    }
 
     var body: some View {
         if let selected {
@@ -309,16 +324,24 @@ struct HistoryView: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 11) {
-                    SectionLabel(text: "Completed")
+                    HStack {
+                        SectionLabel(text: "Completed")
+                        Spacer()
+                        if !done.isEmpty { searchField }
+                    }
+                    let rows = filteredDone
                     if done.isEmpty {
                         Text("No completed transcriptions")
+                            .font(.system(size: 13)).foregroundStyle(Theme.textTertiary)
+                    } else if rows.isEmpty {
+                        Text("No matches for “\(query)”")
                             .font(.system(size: 13)).foregroundStyle(Theme.textTertiary)
                     } else {
                         Card(padding: 0) {
                             VStack(spacing: 0) {
-                                ForEach(Array(done.enumerated()), id: \.element.id) { i, job in
+                                ForEach(Array(rows.enumerated()), id: \.element.id) { i, job in
                                     doneRow(job)
-                                    if i < done.count - 1 { Rectangle().fill(Theme.border).frame(height: 1) }
+                                    if i < rows.count - 1 { Rectangle().fill(Theme.border).frame(height: 1) }
                                 }
                             }
                         }
@@ -333,6 +356,22 @@ struct HistoryView: View {
                 ContentUnavailableView("No transcriptions", systemImage: "clock.arrow.circlepath")
             }
         }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+            TextField("Search", text: $query)
+                .textFieldStyle(.plain).font(.system(size: 12.5))
+                .frame(width: 160)
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.textTertiary).font(.system(size: 11))
+            }
+        }
+        .padding(.horizontal, 9).padding(.vertical, 5)
+        .background(Theme.control, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border, lineWidth: 1))
     }
 
     private func iconBox(_ job: TranscriptionJob, error: Bool = false) -> some View {
@@ -434,9 +473,30 @@ struct HistoryView: View {
             }
         }
         if !job.transcriptText.isEmpty { Button("Claude Summary") { manager.enhance(jobID: job.id) } }
-        Button("Re-transcribe (high quality)") { manager.start(filePath: job.sourcePath) }
+        Button("Re-transcribe (high quality)") { manager.start(filePath: job.sourcePath, videoPath: job.videoPath) }
         Divider()
-        Button("Delete", role: .destructive) { context.delete(job); try? context.save() }
+        Button("Delete entry", role: .destructive) { deleteJob(job, includingFiles: false) }
+        Button("Delete entry & files", role: .destructive) { deleteJob(job, includingFiles: true) }
+    }
+
+    /// #33 — optionally remove the on-disk files (transcript, summary, video, and the
+    /// recording itself when we own it) instead of leaving them orphaned. A dragged-in
+    /// source audio file is never deleted — only recordings WhisperBox created.
+    private func deleteJob(_ job: TranscriptionJob, includingFiles: Bool) {
+        if includingFiles {
+            // outputPath/summaryPath are per-job (unique names) → always safe to remove.
+            var paths = [job.outputPath, job.summaryPath].compactMap { $0 }
+            // sourcePath + videoPath belong to the recording and may be shared by a
+            // re-transcribe job; only delete them when this is genuinely our recording
+            // (#9) and no other job still references the same source.
+            let sharedWithOthers = jobs.contains { $0.id != job.id && $0.sourcePath == job.sourcePath }
+            if AppPaths.isInRecordingsDir(job.sourcePath), !sharedWithOthers {
+                paths.append(job.sourcePath)
+                if let v = job.videoPath { paths.append(v) }
+            }
+            for p in paths { try? FileManager.default.removeItem(atPath: p) }
+        }
+        context.delete(job); try? context.save()
     }
 
     private func open(_ path: String) { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
@@ -452,14 +512,16 @@ struct JobDetailView: View {
     let onBack: () -> Void
     @Environment(TranscriptionManager.self) private var manager
 
+    /// #4 — prefer the in-memory enhancement text; otherwise the file loaded once
+    /// into `loadedSummary` (a `.task`), not re-read from disk on every render.
     private var summaryText: String? {
         if let e = manager.enhancements[job.id], !e.text.isEmpty { return e.text }
-        if let p = job.summaryPath { return try? String(contentsOfFile: p, encoding: .utf8) }
-        return nil
+        return loadedSummary
     }
 
     @State private var tab = 0
     @State private var selectedLog: ExecutionLog?
+    @State private var loadedSummary: String?
     private var isRecording: Bool { AppPaths.isRecording(path: job.sourcePath) }
     private var base: String { URL(fileURLWithPath: job.sourcePath).deletingPathExtension().lastPathComponent }
 
@@ -555,6 +617,10 @@ struct JobDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(item: $selectedLog) { LogDetailSheet(log: $0) }
+            .task(id: job.summaryPath) {   // #4 — read the summary file once, off-main
+                guard let p = job.summaryPath else { loadedSummary = nil; return }
+                loadedSummary = await Task.detached { try? String(contentsOfFile: p, encoding: .utf8) }.value
+            }
 
             // Action bar
             Rectangle().fill(Theme.border).frame(height: 1)
@@ -570,12 +636,29 @@ struct JobDetailView: View {
 
                 Button("Open") { if let p = job.outputPath { NSWorkspace.shared.open(URL(fileURLWithPath: p)) } }
                     .buttonStyle(SecondaryButton()).disabled(job.outputPath == nil)
+                if let v = job.videoPath, FileManager.default.fileExists(atPath: v) {
+                    Button { NSWorkspace.shared.open(URL(fileURLWithPath: v)) } label: {
+                        Label("Play video", systemImage: "play.rectangle")
+                    }.buttonStyle(SecondaryButton())
+                }
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: job.outputPath ?? job.sourcePath)])
                 }.buttonStyle(SecondaryButton())
-                Button("Re-transcribe (HQ)") { manager.start(filePath: job.sourcePath); onBack() }
+                Button("Re-transcribe (HQ)") { manager.start(filePath: job.sourcePath, videoPath: job.videoPath); onBack() }
                     .buttonStyle(SecondaryButton())
                 Spacer()
+                if let url = job.odooArticleURL {
+                    Button { if let u = URL(string: url) { NSWorkspace.shared.open(u) } } label: {
+                        Label("View in Odoo", systemImage: "arrow.up.forward.app")
+                    }.buttonStyle(SecondaryButton())
+                } else if manager.odooConfigured {
+                    let pushing = manager.odooPushes[job.id]?.running == true
+                    Button { manager.pushToOdoo(jobID: job.id) } label: {
+                        Label(pushing ? "Sending…" : "Send to Odoo", systemImage: "arrow.up.doc")
+                    }
+                    .buttonStyle(SecondaryButton())
+                    .disabled(pushing || job.transcriptText.isEmpty)
+                }
                 Button { tab = 1; manager.enhance(jobID: job.id) } label: { Label("Claude Summary", systemImage: "sparkles") }
                     .buttonStyle(PrimaryButton())
                     .disabled(manager.enhancements[job.id]?.running == true || job.transcriptText.isEmpty)
@@ -773,13 +856,18 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var allSettings: [AppSettings]
     @State private var token = ""
+    @State private var odooKey = ""
+    @State private var odooTesting = false
+    @State private var odooTestResult: String?
 
     var body: some View {
         Group {
             if let s = allSettings.first {
                 form(s)
             } else {
-                Color.clear.onAppear { context.insert(AppSettings()); try? context.save() }
+                // The settings row is created once, centrally, in RootView.onAppear —
+                // don't insert here too (duplicate rows make `.first` unstable). #5
+                Color.clear
             }
         }
     }
@@ -820,12 +908,57 @@ struct SettingsView: View {
                                 .lineLimit(1).truncationMode(.middle)
                                 .frame(maxWidth: 200, alignment: .trailing)
                             Button("Choose…") { chooseOutputDir(s) }.buttonStyle(SecondaryButton())
+                            let providers = AppPaths.cloudStorageProviders()
+                            if !providers.isEmpty {
+                                Menu("Cloud…") {
+                                    ForEach(providers, id: \.self) { p in
+                                        Button(p.lastPathComponent) { setOutputDir(s, p.path) }
+                                    }
+                                }
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
+                            }
                             if !s.defaultOutputDir.isEmpty {
                                 Button("Reset") { s.defaultOutputDir = ""; AppPaths.setBase("") }
                                     .buttonStyle(SecondaryButton())
                             }
                         }
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 9) {
+                    SectionLabel(text: "Recording")
+                    Card(padding: 0) {
+                        row("Auto-start on detected calls") {
+                            Picker("", selection: $s.autoRecordMode) {
+                                Text("Off").tag("off")
+                                Text("Ask").tag("ask")
+                                Text("Auto").tag("auto")
+                            }.pickerStyle(.segmented).labelsHidden().frame(width: 210)
+                        }
+                        divider
+                        row("Record video") {
+                            Picker("", selection: $s.videoCaptureMode) {
+                                Text("Off").tag("off")
+                                Text("Full screen").tag("screen")
+                                Text("App").tag("app")
+                            }.pickerStyle(.segmented).labelsHidden().frame(width: 240)
+                        }
+                        if s.videoCaptureMode == "app" {
+                            divider
+                            row("App to capture") {
+                                Menu(appMenuLabel(s.videoAppBundleID)) {
+                                    ForEach(appOptions, id: \.id) { opt in
+                                        Button(opt.name) { s.videoAppBundleID = opt.id }
+                                    }
+                                }
+                                .menuStyle(.borderlessButton).fixedSize()
+                            }
+                        }
+                    }
+                    Text("Auto-start detects when Teams, Zoom, Webex, Slack, or Discord starts using the microphone (\u{201c}Ask\u{201d} prompts you; \u{201c}Auto\u{201d} starts immediately). Video is saved as a separate .mp4 alongside the audio; \u{201c}App\u{201d} records only the chosen app's windows and needs it running when recording starts. Video requires Screen Recording permission.")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 group("Claude Enhancement") {
@@ -895,9 +1028,89 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                odooSection(s)
             }
             .frame(maxWidth: 640, alignment: .leading)
             .padding(.horizontal, 34).padding(.vertical, 24)
+        }
+    }
+
+    // MARK: - Odoo Knowledge (#38)
+
+    @ViewBuilder
+    private func odooSection(_ s: AppSettings) -> some View {
+        @Bindable var s = s
+        VStack(alignment: .leading, spacing: 9) {
+            SectionLabel(text: "Odoo Knowledge")
+            Text("Push meeting summaries into your Private section of Odoo Knowledge. Requires Odoo Enterprise/Online with External API access (Custom plan) and an API key (Preferences → Account Security → New API Key).")
+                .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    toggleRow("Auto-push after summary",
+                              "Send the summary to Odoo Knowledge whenever a Claude summary is generated",
+                              $s.odooAutoPush)
+                }
+            }
+            Card {
+                VStack(spacing: 10) {
+                    labeledField("Base URL", "https://mycompany.odoo.com", $s.odooBaseURL)
+                    labeledField("Database", "mycompany", $s.odooDatabase)
+                    labeledField("Login", "you@company.com", $s.odooLogin)
+                    HStack(spacing: 8) {
+                        Text("API key").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                            .frame(width: 90, alignment: .leading)
+                        SecureField("API key", text: $odooKey).textFieldStyle(.roundedBorder)
+                        Button("Save") {
+                            if !odooKey.isEmpty { KeychainService.set(odooKey, service: KeychainService.odoo); odooKey = "" }
+                        }.buttonStyle(SecondaryButton()).disabled(odooKey.isEmpty)
+                        Button("Clear") { KeychainService.delete(service: KeychainService.odoo) }
+                            .buttonStyle(SecondaryButton())
+                    }
+                    HStack {
+                        Button(odooTesting ? "Testing…" : "Test connection") { testOdoo(s) }
+                            .buttonStyle(SecondaryButton()).disabled(odooTesting)
+                        if KeychainService.get(service: KeychainService.odoo) != nil {
+                            Label("key present", systemImage: "checkmark.seal.fill")
+                                .font(.system(size: 12)).foregroundStyle(Theme.green)
+                        }
+                        Spacer()
+                        if let r = odooTestResult {
+                            Text(r).font(.system(size: 12))
+                                .foregroundStyle(r.hasPrefix("Connected") ? Theme.green : Theme.redDim)
+                                .lineLimit(1).truncationMode(.tail)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func labeledField(_ label: String, _ placeholder: String, _ binding: Binding<String>) -> some View {
+        HStack(spacing: 8) {
+            Text(label).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                .frame(width: 90, alignment: .leading)
+            TextField(placeholder, text: binding).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func testOdoo(_ s: AppSettings) {
+        let key = odooKey.isEmpty ? (KeychainService.get(service: KeychainService.odoo) ?? "") : odooKey
+        guard !s.odooBaseURL.isEmpty, !s.odooDatabase.isEmpty, !s.odooLogin.isEmpty, !key.isEmpty else {
+            odooTestResult = "Fill in URL, database, login, and API key first."
+            return
+        }
+        odooTesting = true; odooTestResult = nil
+        let cfg = OdooConfig(baseURL: s.odooBaseURL, database: s.odooDatabase, login: s.odooLogin, apiKey: key)
+        Task {
+            do {
+                let uid = try await OdooService(config: cfg).testConnection()
+                odooTestResult = "Connected (uid \(uid))"
+            } catch {
+                odooTestResult = error.localizedDescription
+            }
+            odooTesting = false
         }
     }
 
@@ -912,8 +1125,27 @@ struct SettingsView: View {
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        s.defaultOutputDir = url.path
-        AppPaths.setBase(url.path)
+        setOutputDir(s, url.path)
+    }
+
+    private func setOutputDir(_ s: AppSettings, _ path: String) {
+        s.defaultOutputDir = path
+        AppPaths.setBase(path)
+    }
+
+    /// #35 — apps offered for "App" video capture: currently-running regular apps
+    /// (excluding WhisperBox itself), by display name.
+    private var appOptions: [(id: String, name: String)] {
+        let self_ = Bundle.main.bundleIdentifier
+        return NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil && $0.bundleIdentifier != self_ }
+            .compactMap { app in app.bundleIdentifier.map { (id: $0, name: app.localizedName ?? $0) } }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func appMenuLabel(_ bundleID: String) -> String {
+        if bundleID.isEmpty { return "Choose app…" }
+        return appOptions.first { $0.id == bundleID }?.name ?? bundleID
     }
 
     private var divider: some View { Rectangle().fill(Theme.border).frame(height: 1) }
